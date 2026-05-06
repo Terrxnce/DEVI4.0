@@ -1,0 +1,19 @@
+{
+  "confidence_tier": "A",
+  "detector_quality": 0.456,
+  "direction": "BULLISH",
+  "effective_quality": 0.812,
+  "failure_code": "rr_fallback_disabled_no_structural_tp",
+  "final_decision": "REJECTED_EXIT_PLAN",
+  "hard_rejects": [],
+  "planned_rr": 1.31,
+  "planned_sl": 1.0848,
+  "planned_tp": 1.0862,
+  "replayed": true,
+  "setup_class": "OB_WITH_BOS",
+  "soft_penalties": [
+    "h1_neutral"
+  ],
+  "structural_count": 3,
+  "tp_source": "ORDER_BLOCK"
+}

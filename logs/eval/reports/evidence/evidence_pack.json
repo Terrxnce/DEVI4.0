@@ -1,0 +1,9 @@
+{
+  "cohort": "2026-04-30",
+  "generated_at": "2026-04-30T10:02:56.744964+00:00",
+  "inputs": {
+    "decisions": "logs/eval/decisions_2026-04-30.jsonl",
+    "parity": "logs/eval/reports/comparability.json"
+  },
+  "namespace": "eval"
+}

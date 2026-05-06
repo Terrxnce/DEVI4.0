@@ -1,0 +1,10 @@
+{
+  "config": "src/config/defaults.json",
+  "exit_code": 0,
+  "mode": "replay",
+  "namespace": "eval",
+  "output": "logs\\eval\\snapshots\\snap_001.replay.json",
+  "run_id": "phase0_evidence_run",
+  "tool": "replay run",
+  "verdict": "PASS"
+}

@@ -1,0 +1,89 @@
+{
+  "detection": {
+    "atr_period": 14
+  },
+  "trend": {
+    "ema_periods": [21, 50, 200],
+    "slope_lookback": 5,
+    "slope_threshold_atr_mult": 0.002
+  },
+  "regime": {
+    "trending_threshold": 0.65,
+    "expanding_threshold": 0.85
+  },
+  "confluence": {
+    "block_ranging_regime": true,
+    "tier_c_tradable": false
+  },
+  "exits": {
+    "min_rr": 1.5,
+    "min_rr_neutral": 1.5,
+    "rr_fallback_enabled": false,
+    "require_structural_tp_in_neutral": true
+  },
+  "risk": {
+    "risk_per_trade_pct": 0.4,
+    "allow_multiple_positions": false,
+    "max_open_positions_total": 1,
+    "max_open_positions_per_symbol": 1,
+    "dynamic_lot_sizing": false,
+    "fixed_lot_size": 0.01
+  },
+  "gates": {
+    "allowed_setups": ["OB_WITH_BOS", "OB_WITH_ENGULFING"]
+  },
+  "execution": {
+    "mode": "MARKET",
+    "auto_execute_live": false,
+    "live_confirmed": true,
+    "arming_required": true,
+    "max_orders_per_run": 1,
+    "kill_switch_enabled": true,
+    "kill_switch_threshold": {
+      "max_failed_orders_last_10m": 1
+    },
+    "retry_policy": "no_retry",
+    "deviation_points": 5,
+    "slippage_max": 0.00005,
+    "symbol_whitelist": ["EURUSD"],
+    "allow_overrides": false,
+    "debug_bypass": false,
+    "on_violation": "reject",
+    "pre_trade_rechecks": {
+      "spread": true,
+      "slippage": true,
+      "margin": true,
+      "symbol": true,
+      "session": true,
+      "market_open": true,
+      "risk": true
+    },
+    "profile_note": "NO ORDER SEND PATH ACTIVE"
+  },
+  "runtime": {
+    "namespace": "prod",
+    "mode": "live",
+    "logs_root": "logs"
+  },
+  "instrument": {
+    "symbol": "EURUSD",
+    "min_lot": 0.01,
+    "lot_step": 0.01,
+    "max_lot": 0.01
+  },
+  "trading_window": {
+    "enabled": true,
+    "timezone": "UTC",
+    "days": ["MON", "TUE", "WED", "THU", "FRI"],
+    "start_utc": "07:00",
+    "end_utc": "07:15"
+  },
+  "telemetry": {
+    "enabled": true,
+    "write_decisions": true,
+    "write_live_orders": true,
+    "write_trades": true,
+    "write_snapshots": true,
+    "fail_on_write_error": true
+  }
+}

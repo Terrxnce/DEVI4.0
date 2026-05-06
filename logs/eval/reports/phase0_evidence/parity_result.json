@@ -1,0 +1,11 @@
+{
+  "config": "src/config/defaults.json",
+  "diff_count": 0,
+  "exit_code": 0,
+  "mode": "paper",
+  "namespace": "eval",
+  "output": "logs/eval/reports/comparability",
+  "run_id": "phase0_evidence_run",
+  "tool": "comparability check",
+  "verdict": "PASS"
+}

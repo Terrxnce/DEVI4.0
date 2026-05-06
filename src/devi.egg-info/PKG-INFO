@@ -1,0 +1,5 @@
+Metadata-Version: 2.4
+Name: devi
+Version: 4.0.0
+Summary: D.E.V.I 4.0 deterministic MT5 automation scaffold
+Requires-Python: >=3.11

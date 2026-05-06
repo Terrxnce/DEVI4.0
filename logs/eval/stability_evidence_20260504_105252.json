@@ -1,0 +1,182 @@
+{
+  "timestamp": "2026-05-04T10:52:52.639054+00:00",
+  "cycles": 5,
+  "symbols": [
+    "EURUSD",
+    "GBPUSD",
+    "AUDUSD",
+    "NZDUSD"
+  ],
+  "total_decisions": 20,
+  "total_trades": 0,
+  "duplicate_decisions": false,
+  "duplicate_trades": false,
+  "cycle_results": [
+    {
+      "cycle": 1,
+      "run_id": "stab_20260504_105252_c1",
+      "decision_count": 4,
+      "trade_count": 0,
+      "open_positions": 0,
+      "symbols": {
+        "AUDUSD": {
+          "decision": "HOLD",
+          "failure_code": "gate_blocked_setup_disabled",
+          "bars_m15": 100,
+          "skipped": false
+        },
+        "EURUSD": {
+          "decision": "HOLD",
+          "failure_code": "gate_blocked_setup_disabled",
+          "bars_m15": 100,
+          "skipped": false
+        },
+        "GBPUSD": {
+          "decision": "HOLD",
+          "failure_code": "gate_blocked_setup_disabled",
+          "bars_m15": 100,
+          "skipped": false
+        },
+        "NZDUSD": {
+          "decision": "HOLD",
+          "failure_code": "no_setup_match",
+          "bars_m15": 100,
+          "skipped": false
+        }
+      }
+    },
+    {
+      "cycle": 2,
+      "run_id": "stab_20260504_105252_c2",
+      "decision_count": 4,
+      "trade_count": 0,
+      "open_positions": 0,
+      "symbols": {
+        "AUDUSD": {
+          "decision": "HOLD",
+          "failure_code": "gate_blocked_setup_disabled",
+          "bars_m15": 100,
+          "skipped": false
+        },
+        "EURUSD": {
+          "decision": "HOLD",
+          "failure_code": "gate_blocked_setup_disabled",
+          "bars_m15": 100,
+          "skipped": false
+        },
+        "GBPUSD": {
+          "decision": "HOLD",
+          "failure_code": "gate_blocked_setup_disabled",
+          "bars_m15": 100,
+          "skipped": false
+        },
+        "NZDUSD": {
+          "decision": "HOLD",
+          "failure_code": "no_setup_match",
+          "bars_m15": 100,
+          "skipped": false
+        }
+      }
+    },
+    {
+      "cycle": 3,
+      "run_id": "stab_20260504_105252_c3",
+      "decision_count": 4,
+      "trade_count": 0,
+      "open_positions": 0,
+      "symbols": {
+        "AUDUSD": {
+          "decision": "HOLD",
+          "failure_code": "gate_blocked_setup_disabled",
+          "bars_m15": 100,
+          "skipped": false
+        },
+        "EURUSD": {
+          "decision": "HOLD",
+          "failure_code": "gate_blocked_setup_disabled",
+          "bars_m15": 100,
+          "skipped": false
+        },
+        "GBPUSD": {
+          "decision": "HOLD",
+          "failure_code": "gate_blocked_setup_disabled",
+          "bars_m15": 100,
+          "skipped": false
+        },
+        "NZDUSD": {
+          "decision": "HOLD",
+          "failure_code": "no_setup_match",
+          "bars_m15": 100,
+          "skipped": false
+        }
+      }
+    },
+    {
+      "cycle": 4,
+      "run_id": "stab_20260504_105252_c4",
+      "decision_count": 4,
+      "trade_count": 0,
+      "open_positions": 0,
+      "symbols": {
+        "AUDUSD": {
+          "decision": "HOLD",
+          "failure_code": "gate_blocked_setup_disabled",
+          "bars_m15": 100,
+          "skipped": false
+        },
+        "EURUSD": {
+          "decision": "HOLD",
+          "failure_code": "gate_blocked_setup_disabled",
+          "bars_m15": 100,
+          "skipped": false
+        },
+        "GBPUSD": {
+          "decision": "HOLD",
+          "failure_code": "gate_blocked_setup_disabled",
+          "bars_m15": 100,
+          "skipped": false
+        },
+        "NZDUSD": {
+          "decision": "HOLD",
+          "failure_code": "no_setup_match",
+          "bars_m15": 100,
+          "skipped": false
+        }
+      }
+    },
+    {
+      "cycle": 5,
+      "run_id": "stab_20260504_105252_c5",
+      "decision_count": 4,
+      "trade_count": 0,
+      "open_positions": 0,
+      "symbols": {
+        "AUDUSD": {
+          "decision": "HOLD",
+          "failure_code": "gate_blocked_setup_disabled",
+          "bars_m15": 100,
+          "skipped": false
+        },
+        "EURUSD": {
+          "decision": "HOLD",
+          "failure_code": "gate_blocked_setup_disabled",
+          "bars_m15": 100,
+          "skipped": false
+        },
+        "GBPUSD": {
+          "decision": "HOLD",
+          "failure_code": "gate_blocked_setup_disabled",
+          "bars_m15": 100,
+          "skipped": false
+        },
+        "NZDUSD": {
+          "decision": "HOLD",
+          "failure_code": "no_setup_match",
+          "bars_m15": 100,
+          "skipped": false
+        }
+      }
+    }
+  ],
+  "passed": true
+}

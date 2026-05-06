@@ -1,0 +1,150 @@
+{
+  "build_id": "4.0.0-paper",
+  "_description": "Paper/eval profile with full pipeline enabled for Phase 1 paper testing. Live execution remains blocked.",
+  "pipeline": {
+    "enable_full_phase1_flow": true
+  },
+  "detection": {
+    "atr_period": 14,
+    "h1_detection_age_multiplier": 2.5,
+    "order_block": {
+      "min_body_atr_mult": 0.4,
+      "max_age_bars": 20,
+      "min_quality": 0.45
+    },
+    "fair_value_gap": {
+      "min_gap_atr_mult": 0.3,
+      "max_age_bars": 15,
+      "min_quality": 0.45
+    },
+    "break_of_structure": {
+      "min_swing_atr_mult": 0.5,
+      "lookback_bars": 20,
+      "min_quality": 0.4
+    },
+    "sweep": {
+      "max_wick_atr_mult": 1.5,
+      "min_wick_body_ratio": 2.0,
+      "max_age_bars": 10,
+      "min_quality": 0.4
+    },
+    "rejection": {
+      "min_wick_atr_mult": 0.5,
+      "min_wick_body_ratio": 1.5,
+      "max_age_bars": 5,
+      "min_quality": 0.4
+    },
+    "engulfing": {
+      "min_body_atr_mult": 0.3,
+      "max_age_bars": 3,
+      "min_quality": 0.35
+    }
+  },
+  "trend": {
+    "ema_periods": [21, 50, 200],
+    "slope_lookback": 5,
+    "slope_threshold_atr_mult": 0.002
+  },
+  "regime": {
+    "trending_threshold": 0.65,
+    "expanding_threshold": 0.85
+  },
+  "confluence": {
+    "tier_a_min_confirmations": 3,
+    "tier_b_min_confirmations": 2,
+    "tier_c_min_confirmations": 1,
+    "tier_c_tradable": false,
+    "triple_penalty_quality_floor": 0.8,
+    "block_ranging_regime": true
+  },
+  "exits": {
+    "min_rr": 1.3,
+    "min_rr_preferred": 1.5,
+    "min_rr_neutral": 1.5,
+    "rr_fallback_enabled": false,
+    "require_structural_tp_in_neutral": true,
+    "sl_buffer_atr_mult": 0.1,
+    "atr_fallback_sl_mult": 1.5,
+    "min_sl_atr_mult": 0.5,
+    "min_sl_spread_mult": 2.0,
+    "min_sl_quality": 0.6,
+    "min_sl_depth_atr_trending": 1.5,
+    "min_sl_depth_atr_neutral": 2.0,
+    "sl_h1_tf_weight": 1.15,
+    "m15_tp_search_atr": 6.0,
+    "h1_tp_search_atr": 8.0,
+    "tp_h1_expand_mult": 1.25,
+    "tp_h1_expand_mult_max": 1.4,
+    "tp_h1_search_hard_cap_atr": 10.0,
+    "tp_h1_base_relevance": 0.85,
+    "swing_tp_enabled": true,
+    "swing_tp_type_weight": 0.65,
+    "swing_tp_max_range_atr": 10.0,
+    "swing_tp_min_quality": 0.4,
+    "swing_tp_overlap_atr": 0.3,
+    "swing_tp_max_candidates": 3,
+    "management": {
+      "partials_enabled": false,
+      "trailing_enabled": true,
+      "session_close_exit": true,
+      "breakeven_at_r": 1.0
+    }
+  },
+  "risk": {
+    "risk_per_trade_pct": 0.4,
+    "soft_daily_reduction_pct": -1.5,
+    "block_new_trades_daily_pct": -3.0,
+    "force_close_daily_pct": -4.5,
+    "block_new_trades_total_pct": -8.0,
+    "force_close_total_pct": -9.5,
+    "max_open_positions_total": 3,
+    "max_open_positions_per_symbol": 1,
+    "max_new_trades_per_session": 4,
+    "max_correlated_positions": 2,
+    "same_direction_correlation_cap": 1
+  },
+  "consecutive_loss": {
+    "symbol_pause_after": 2,
+    "global_stop_after": 3,
+    "direction_cooldown_bars": 4
+  },
+  "gates": {
+    "mode": "enforce",
+    "allowed_setups": ["OB_WITH_BOS", "OB_WITH_ENGULFING"],
+    "symbols_disabled": ["US100"]
+  },
+  "execution": {
+    "mode": "MARKET",
+    "auto_execute_live": false,
+    "manual_approval_required": false,
+    "live_confirmed": false,
+    "max_orders_per_run": 1,
+    "kill_switch_enabled": true
+  },
+  "runtime": {
+    "namespace": "eval",
+    "mode": "paper",
+    "logs_root": "logs",
+    "data_source": "snapshot"
+  },
+  "instrument": {
+    "symbol": "EURUSD",
+    "instrument_class": "FX",
+    "tick_size": 0.00001,
+    "lot_step": 0.01,
+    "min_lot": 0.01,
+    "max_lot": 100.0,
+    "digits": 5,
+    "point": 0.00001,
+    "contract_size": 100000.0,
+    "noise_floor_atr_mult": 1.5,
+    "spread_warn_atr_mult": 2.0,
+    "stale_entry_atr_mult": 3.0
+  },
+  "sessions": {
+    "ASIA": {"start": "00:00", "end": "07:00"},
+    "LONDON": {"start": "07:00", "end": "12:00"},
+    "NY_AM": {"start": "12:00", "end": "16:00"},
+    "NY_PM": {"start": "16:00", "end": "20:00"}
+  }
+}

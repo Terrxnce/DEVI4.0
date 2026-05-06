@@ -1,0 +1,16 @@
+{
+  "checks": {
+    "invalid": 0,
+    "ok": true,
+    "total": 1,
+    "tp_debug_coverage_fail": 0
+  },
+  "config": "src/config/defaults.json",
+  "exit_code": 0,
+  "mode": "paper",
+  "namespace": "eval",
+  "output": "logs/eval/reports/telemetry_validation",
+  "run_id": "phase0_evidence_run",
+  "tool": "telemetry validate",
+  "verdict": "PASS"
+}
