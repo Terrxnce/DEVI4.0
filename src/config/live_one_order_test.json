@@ -131,7 +131,9 @@
   },
   "entry_gate": {
     "proximity_gate_enabled": true,
-    "proximity_atr_mult": 0.5
+    "proximity_atr_mult": 0.5,
+    "session_proximity_gate_enabled": true,
+    "session_proximity_gate_minutes": 60
   },
   "execution": {
     "mode": "MARKET",
@@ -258,7 +260,6 @@
       "ASIA"
     ],
     "CHFJPY": [
-      "ASIA",
       "LONDON"
     ],
     "EURUSD": [
@@ -272,10 +273,10 @@
       "NY_PM"
     ],
     "EURJPY": [
-      "LONDON"
+      "LONDON",
+      "NY_AM"
     ],
     "GBPJPY": [
-      "ASIA",
       "LONDON"
     ],
     "EURGBP": [

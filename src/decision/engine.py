@@ -8,6 +8,7 @@ from src.core.models import ConfluenceResult, ContextSnapshot, DetectedStructure
 from src.context.references import PriceReferenceLevels
 from src.decision.confluence import ConfluenceConfig, evaluate_confluence
 from src.decision.entry_gate import evaluate_entry_proximity
+from src.decision.session_proximity import evaluate_session_proximity
 from src.decision.setup_rules import SetupCandidate, match_setup_candidates
 from src.execution.gate import evaluate_execution
 from src.exits.planner import ExitFailure, plan_exit
@@ -285,6 +286,25 @@ def evaluate_decision(
                 trade_intent=None,
                 tp_debug=new_tp_debug(),
             )
+
+    # Session proximity gate: block entries when the active session closes soon.
+    # Configured under config["entry_gate"]["session_proximity_gate_enabled"].
+    # Uses context.bar_time (UTC) and context.symbol to check remaining session time.
+    _sess_prox_ok, _sess_prox_code = evaluate_session_proximity(
+        symbol=context.symbol,
+        now_utc=context.bar_time,
+        config=config,
+    )
+    if not _sess_prox_ok:
+        return DecisionOutcome(
+            final_decision=FinalDecision.HOLD,
+            failure_code=_sess_prox_code,
+            confluence=best,
+            exit_plan=None,
+            risk_verdict=None,
+            trade_intent=None,
+            tp_debug=new_tp_debug(),
+        )
 
     try:
         exit_plan, tp_debug = plan_exit(
