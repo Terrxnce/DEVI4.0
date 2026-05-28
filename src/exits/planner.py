@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from src.core.enums import Direction, Regime, StructureType, Timeframe
 from src.core.models import ContextSnapshot, DetectedStructure, ExitPlan
 from src.context.references import PriceReferenceLevels
+
+if TYPE_CHECKING:
+    from src.context.session_levels import SessionLevels
 from src.exits.tp_diagnostics import (
     TPCandidateView,
     add_found,
@@ -55,6 +58,10 @@ TP_SOURCE_WEIGHT: dict[str, float] = {
     "SWING": 0.95,
     "PRIOR_DAY": 0.9,
     "PRIOR_SESSION": 0.85,
+    # Prior session H/L used as natural TP for sweep reversal setups.
+    # Weighted slightly above H1_STRUCTURE — this level is the narrative's
+    # structural target (return to the other side of the session range).
+    "SESSION_LEVEL": 1.05,
 }
 
 
@@ -89,6 +96,16 @@ def _pick_sl(
     exits_cfg = config["exits"]
     floor_atr = _regime_sl_floor_atr(context.regime, exits_cfg)
     floor_distance = floor_atr * atr
+
+    # Absolute pip floor — guards against ATR compression in quiet sessions.
+    # min_sl_pips is optional; defaults to 0 (no pip floor) if not configured.
+    min_sl_pips = float(exits_cfg.get("min_sl_pips", 0.0))
+    if min_sl_pips > 0.0:
+        point = float(config.get("instrument", {}).get("point", 0.00001))
+        pip_size = point * 10.0  # 1 pip = 10 points for 5-decimal brokers
+        pip_floor_distance = min_sl_pips * pip_size
+        floor_distance = max(floor_distance, pip_floor_distance)
+
     sl_buffer = float(exits_cfg["sl_buffer_atr_mult"]) * atr
     min_quality = float(exits_cfg["min_sl_quality"])
     h1_weight = float(exits_cfg["sl_h1_tf_weight"])
@@ -169,18 +186,23 @@ def _collect_tp_candidates(
     references: PriceReferenceLevels,
     atr: float,
     config: dict[str, Any],
+    tp_structures: list[DetectedStructure] | None = None,
+    session_levels: "SessionLevels | None" = None,
 ) -> tuple[list[TPChoice], dict[str, Any]]:
     tp_debug = new_tp_debug()
     exits_cfg = config["exits"]
     risk = _risk_distance(entry_price, sl_price, direction)
     min_rr = float(exits_cfg["min_rr"])
     max_distance_atr = float(exits_cfg["tp_h1_search_hard_cap_atr"])
+    # Use the wider TP pool if provided, else fall back to the entry structures list.
+    # SL anchoring (same-direction, recent) stays on the entry structures list always.
+    structure_pool = tp_structures if tp_structures is not None else structures
     current_bar_index = max((s.bar_index for s in structures), default=0)
 
     raw_candidates: list[TPChoice] = []
 
     opposing_direction = Direction.BEARISH if direction == Direction.BULLISH else Direction.BULLISH
-    for structure in structures:
+    for structure in structure_pool:
         if structure.direction != opposing_direction:
             continue
 
@@ -296,6 +318,41 @@ def _collect_tp_candidates(
             )
         )
 
+    # Session level TP candidates — prior session H (for BULLISH) or L (for BEARISH).
+    # These are the natural targets for sweep reversal setups: price swept the session
+    # extreme and is expected to return to the opposite side of the session range.
+    # Safe to include for any setup — the quality/RR filter handles non-viable levels.
+    if session_levels is not None and session_levels.prior_completed_sessions:
+        prior_session = session_levels.prior_completed_sessions[0]
+        if direction == Direction.BULLISH and prior_session.high > entry_price:
+            distance = _tp_distance(entry_price, prior_session.high, direction)
+            dist_atr = distance / atr if atr > 0 else 0.0
+            raw_candidates.append(
+                TPChoice(
+                    price=prior_session.high,
+                    source="SESSION_LEVEL",
+                    kind="REFERENCE",
+                    rr=distance / risk if risk > 0 else 0.0,
+                    distance_atr=dist_atr,
+                    quality=_candidate_quality("SESSION_LEVEL", 0.75, 0, dist_atr),
+                    age_bars=0,
+                )
+            )
+        if direction == Direction.BEARISH and prior_session.low < entry_price:
+            distance = _tp_distance(entry_price, prior_session.low, direction)
+            dist_atr = distance / atr if atr > 0 else 0.0
+            raw_candidates.append(
+                TPChoice(
+                    price=prior_session.low,
+                    source="SESSION_LEVEL",
+                    kind="REFERENCE",
+                    rr=distance / risk if risk > 0 else 0.0,
+                    distance_atr=dist_atr,
+                    quality=_candidate_quality("SESSION_LEVEL", 0.75, 0, dist_atr),
+                    age_bars=0,
+                )
+            )
+
     deduped = _dedup_tp_candidates(raw_candidates, atr)
     filtered: list[TPChoice] = []
     for candidate in deduped:
@@ -313,7 +370,8 @@ def _collect_tp_candidates(
         if candidate.distance_atr > max_distance_atr:
             add_rejected(tp_debug, view, "tp_too_far", "distance_filter")
             continue
-        if candidate.age_bars > 60:
+        tp_max_age = int(exits_cfg.get("tp_max_age_bars", 250))
+        if candidate.age_bars > tp_max_age:
             add_rejected(tp_debug, view, "tp_too_old", "quality_filter")
             continue
         if candidate.rr < min_rr:
@@ -337,6 +395,8 @@ def plan_exit(
     references: PriceReferenceLevels,
     atr: float,
     config: dict[str, Any],
+    tp_structures: list[DetectedStructure] | None = None,
+    session_levels: "SessionLevels | None" = None,
 ) -> tuple[ExitPlan, dict[str, Any]]:
     exits_cfg = config["exits"]
 
@@ -358,6 +418,8 @@ def plan_exit(
         references=references,
         atr=atr,
         config=config,
+        tp_structures=tp_structures,
+        session_levels=session_levels,
     )
 
     if not candidates:

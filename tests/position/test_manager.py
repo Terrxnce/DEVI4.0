@@ -139,10 +139,17 @@ def test_build_trade_intent_rejects_zero_lot_size() -> None:
     assert verdict.reason == "invalid_lot_size"
 
 
-def test_build_trade_intent_rejects_partials_enabled() -> None:
+def test_build_trade_intent_approved_with_partials_enabled() -> None:
+    """partials_enabled=True must NOT block trade approval.
+
+    Regression test for the inverted partials guard removed from
+    build_trade_intent (fix: task #46). Previously the function returned
+    partials_not_supported_phase1 whenever partials_enabled was True, which
+    killed every Tier A setup on live_market_watch.json where partials are on.
+    """
     cfg = _config()
     cfg["exits"] = dict(cfg["exits"])
-    cfg["exits"]["management"] = dict(cfg["exits"]["management"])
+    cfg["exits"]["management"] = dict(cfg["exits"].get("management", {}))
     cfg["exits"]["management"]["partials_enabled"] = True
 
     verdict = build_trade_intent(
@@ -154,5 +161,54 @@ def test_build_trade_intent_rejects_partials_enabled() -> None:
         config=cfg,
     )
 
-    assert verdict.approved is False
-    assert verdict.reason == "partials_not_supported_phase1"
+    assert verdict.approved is True
+    assert verdict.reason == "approved"
+    assert verdict.trade_intent is not None
+
+
+def test_build_trade_intent_approved_with_partials_disabled() -> None:
+    """partials_enabled=False must also approve normally."""
+    cfg = _config()
+    cfg["exits"] = dict(cfg["exits"])
+    cfg["exits"]["management"] = dict(cfg["exits"].get("management", {}))
+    cfg["exits"]["management"]["partials_enabled"] = False
+
+    verdict = build_trade_intent(
+        context=_context(),
+        confluence=_confluence(),
+        exit_plan=_exit_plan(),
+        risk_verdict=RiskVerdict(True, 1.0, 0.4, 0.4, "approved"),
+        entry_price=1.0990,
+        config=cfg,
+    )
+
+    assert verdict.approved is True
+    assert verdict.reason == "approved"
+    assert verdict.trade_intent is not None
+
+
+def test_build_trade_intent_never_returns_partials_not_supported() -> None:
+    """build_trade_intent must never return partials_not_supported_phase1.
+
+    The reason string was the signature of the removed Phase 1 guard.
+    If it ever reappears it means the guard was accidentally re-added.
+    """
+    for partials_flag in (True, False):
+        cfg = _config()
+        cfg["exits"] = dict(cfg["exits"])
+        cfg["exits"]["management"] = dict(cfg["exits"].get("management", {}))
+        cfg["exits"]["management"]["partials_enabled"] = partials_flag
+
+        verdict = build_trade_intent(
+            context=_context(),
+            confluence=_confluence(),
+            exit_plan=_exit_plan(),
+            risk_verdict=RiskVerdict(True, 1.0, 0.4, 0.4, "approved"),
+            entry_price=1.0990,
+            config=cfg,
+        )
+
+        assert verdict.reason != "partials_not_supported_phase1", (
+            "partials_not_supported_phase1 guard must not exist "
+            "(partials_enabled={})".format(partials_flag)
+        )

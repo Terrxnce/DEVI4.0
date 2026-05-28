@@ -6,7 +6,7 @@ from typing import Any
 from src.core.enums import Direction, Session
 from src.core.models import Bar, ContextSnapshot, DetectedStructure
 from src.context.regime import atr_history_simple, atr_percentile, classify_regime, simple_atr
-from src.context.trend import classify_ema_trend, classify_htf_agreement, ema
+from src.context.trend import classify_adx_trend, classify_htf_agreement, ema, ema50_delta_slope_norm
 
 
 class ContextBuildError(ValueError):
@@ -41,6 +41,7 @@ def build_context_snapshot(
     micro_window: bool = False,
     stale_entry: bool = False,
     news_blocked: bool = False,
+    bars_h4: list[Bar] | None = None,
 ) -> ContextSnapshot:
     if not bars_m15:
         raise ContextBuildError("insufficient_data:bars_m15_missing")
@@ -57,20 +58,20 @@ def build_context_snapshot(
     atr_m15 = simple_atr(bars_m15, atr_period)
     atr_h1 = simple_atr(bars_h1, atr_period)
 
-    trend_m15, slope_m15 = classify_ema_trend(
-        closes_m15,
-        atr=atr_m15,
-        ema_periods=tuple(trend_cfg["ema_periods"]),
-        slope_lookback=int(trend_cfg["slope_lookback"]),
-        slope_threshold_atr_mult=float(trend_cfg["slope_threshold_atr_mult"]),
-    )
-    trend_h1, _ = classify_ema_trend(
-        closes_h1,
-        atr=atr_h1,
-        ema_periods=tuple(trend_cfg["ema_periods"]),
-        slope_lookback=int(trend_cfg["slope_lookback"]),
-        slope_threshold_atr_mult=float(trend_cfg["slope_threshold_atr_mult"]),
-    )
+    adx_period = int(trend_cfg.get("adx_period", 14))
+    adx_threshold = float(trend_cfg.get("adx_trend_threshold", 20.0))
+
+    trend_m15, _ = classify_adx_trend(bars_m15, period=adx_period, adx_threshold=adx_threshold)
+    trend_h1, _ = classify_adx_trend(bars_h1, period=adx_period, adx_threshold=adx_threshold)
+    # H4 macro bias — NEUTRAL when bars not provided or insufficient
+    if bars_h4 and len(bars_h4) >= adx_period * 2 + 1:
+        trend_h4, _ = classify_adx_trend(bars_h4, period=adx_period, adx_threshold=adx_threshold)
+    else:
+        trend_h4 = Direction.NEUTRAL
+
+    # slope_m15 is still used by regime classification (EMA-based slope, separate from trend direction)
+    slope_lookback = int(trend_cfg.get("slope_lookback", 5))
+    slope_m15 = ema50_delta_slope_norm(closes_m15, atr=atr_m15, lookback=slope_lookback, period=50)
     htf_agreement = classify_htf_agreement(trend_m15=trend_m15, trend_h1=trend_h1)
 
     atr_hist = atr_history_simple(bars_m15, atr_period)
@@ -123,4 +124,5 @@ def build_context_snapshot(
             detected_structures,
             key=lambda item: (-item.quality, item.age_bars, item.bar_index, item.structure_type.value),
         ),
+        trend_h4=trend_h4,
     )

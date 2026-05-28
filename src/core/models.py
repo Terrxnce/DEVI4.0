@@ -61,6 +61,7 @@ class ContextSnapshot:
     stale_entry: bool
     news_blocked: bool
     nearby_structures: list[DetectedStructure]
+    trend_h4: Direction = Direction.NEUTRAL
 
 
 @dataclass(frozen=True)
@@ -133,6 +134,7 @@ class InstrumentProfile:
     noise_floor_atr_mult: float
     spread_warn_atr_mult: float
     stale_entry_atr_mult: float
+    tick_value: float = 1.0  # MT5 trade_tick_value — value of 1 tick per lot in account currency
 
 
 @dataclass(frozen=True)
@@ -158,6 +160,8 @@ class DecisionRecord:
     sl_distance_price: float = 0.0
     sl_distance_points: float = 0.0
     sl_distance_pips: float = 0.0
+    setup_class: str = ""
+    confidence_tier: str = ""
 
 
 @dataclass(frozen=True)

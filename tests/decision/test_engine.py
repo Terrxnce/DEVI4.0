@@ -317,17 +317,23 @@ def test_confluence_pass_exit_risk_compliance_ok_but_execution_stage_rejected(
     )
 
     assert out.final_decision == FinalDecision.REJECTED_EXECUTION
-    assert out.failure_code == "live_execution_not_allowed_phase1"
+    assert out.failure_code == "live_auto_execute_disabled"
     assert out.exit_plan is not None
     assert out.risk_verdict is not None
     assert out.risk_verdict.approved is True
 
 
-def test_position_management_rejects_when_partials_enabled(
+def test_position_management_executes_when_partials_enabled(
     make_structure_fn,
     make_context_fn,
     default_config,
 ) -> None:
+    """partials_enabled=True must not block execution.
+
+    Regression test for the inverted partials guard removed from
+    build_trade_intent (fix: task #46). The engine must return EXECUTE
+    when a valid setup passes all gates, regardless of partials_enabled.
+    """
     cfg = dict(default_config)
     cfg["pipeline"] = {"enable_full_phase1_flow": True}
     cfg["exits"] = dict(default_config["exits"])
@@ -364,11 +370,11 @@ def test_position_management_rejects_when_partials_enabled(
         atr_override=0.001,
     )
 
-    assert out.final_decision == FinalDecision.REJECTED_EXECUTION
-    assert out.failure_code == "partials_not_supported_phase1"
+    assert out.final_decision == FinalDecision.EXECUTE
+    assert out.failure_code != "partials_not_supported_phase1"
+    assert out.trade_intent is not None
     assert out.exit_plan is not None
     assert out.risk_verdict is not None
-    assert out.trade_intent is None
 
 
 def test_deterministic_best_setup_selection(make_structure_fn) -> None:

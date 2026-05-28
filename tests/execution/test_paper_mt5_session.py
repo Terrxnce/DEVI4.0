@@ -70,6 +70,7 @@ def _mock_mt5_client():
     class MockMT5:
         TIMEFRAME_M15 = "TIMEFRAME_M15"
         TIMEFRAME_H1 = "TIMEFRAME_H1"
+        TIMEFRAME_H4 = "TIMEFRAME_H4"
 
         def initialize(self):
             return True
@@ -121,8 +122,8 @@ def test_paper_session_runs_with_mock_mt5(tmp_path) -> None:
     print(f"    tick_ask: {sym.tick_ask}")
     print(f"    paper_fill: {sym.paper_fill is not None}")
 
-    assert sym.bars_m15_count == 100
-    assert sym.bars_h1_count == 50
+    assert sym.bars_m15_count == 250
+    assert sym.bars_h1_count == 250
     assert result.account_balance == 10000.0
     assert result.account_equity == 10050.0
     assert sym.tick_bid > 0

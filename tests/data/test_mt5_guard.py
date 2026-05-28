@@ -47,6 +47,7 @@ class FakeMT5:
 
     TIMEFRAME_M15 = "M15"
     TIMEFRAME_H1 = "H1"
+    TIMEFRAME_H4 = "H4"
 
 
 def test_allowed_methods_pass_through() -> None:

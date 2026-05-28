@@ -97,8 +97,11 @@ class LiveOrderWrapper:
         runtime_state: RuntimeState,
         decision_spread: float,
         max_orders_per_run: int,
+        kill_switch_enabled: bool = False,
         risk_dynamic_lot_sizing: bool = True,
         risk_fixed_lot_size: float | None = None,
+        risk_per_trade_pct: float = 0.01,
+        spread_max_price: float | None = None,
     ) -> LiveOrderResult:
         """Validate all gates and either mock-send or block."""
 
@@ -116,8 +119,8 @@ class LiveOrderWrapper:
                 f"Symbol {intent.symbol} not in armed token symbols",
             )
 
-        # Gate 2: Kill switch
-        ks_verdict = kill_switch.evaluate()
+        # Gate 2: Kill switch — pass config flag so operator can halt via config
+        ks_verdict = kill_switch.evaluate(config_kill_switch_enabled=kill_switch_enabled)
         if ks_verdict.triggered:
             return self._blocked(
                 intent,
@@ -139,6 +142,8 @@ class LiveOrderWrapper:
             decision_spread=decision_spread,
             dynamic_lot_sizing=risk_dynamic_lot_sizing,
             fixed_lot_size=risk_fixed_lot_size,
+            risk_pct=risk_per_trade_pct,
+            spread_max_price=spread_max_price,
         )
         if not recheck_verdict.passed:
             return self._blocked(
@@ -289,6 +294,11 @@ class LiveOrderWrapper:
 
         ticket = getattr(result, "order", None)
         actual_price = getattr(result, "price", intent.entry_price)
+        # MT5 sometimes returns price=0 on fills (broker-dependent behaviour).
+        # Fall back to intended entry so slippage = 0 rather than a garbage
+        # negative value equal to -entry_price.
+        if not actual_price or float(actual_price) <= 0:
+            actual_price = intent.entry_price
         slippage = float(actual_price) - float(intent.entry_price)
 
         order_result = LiveOrderResult(
@@ -299,7 +309,7 @@ class LiveOrderWrapper:
             symbol=intent.symbol,
             side=intent.direction.value,
             lot_size=intent.risk_verdict.lot_size,
-            entry_price=intent.entry_price,
+            entry_price=float(actual_price),  # actual broker fill, not requested bid
             stop_loss=intent.exit_plan.stop_loss,
             take_profit=intent.exit_plan.take_profit,
             ticket=ticket,
@@ -330,7 +340,7 @@ class LiveOrderWrapper:
             "timestamp": result.execution_time,
             "run_id": token.run_id,
             "token_id": str(token.token_id),
-            "decision_id": intent.trade_id,
+            "trade_id": intent.trade_id,
             "symbol": intent.symbol,
             "side": result.side,
             "lot_size": result.lot_size,
@@ -380,3 +390,4 @@ class LiveOrderWrapper:
             mt5_initialized=mt5_initialized,
             mt5_last_error=mt5_last_error,
         )
+

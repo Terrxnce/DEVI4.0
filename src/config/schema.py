@@ -8,7 +8,8 @@ REQUIRED_PATHS = (
     "detection.atr_period",
     "trend.ema_periods",
     "trend.slope_lookback",
-    "trend.slope_threshold_atr_mult",
+    "trend.adx_period",
+    "trend.adx_trend_threshold",
     "regime.trending_threshold",
     "regime.expanding_threshold",
     "confluence.block_ranging_regime",
@@ -28,13 +29,7 @@ REQUIRED_PATHS = (
 )
 
 
-FROZEN_CONSTRAINTS: dict[str, Any] = {
-    "exits.rr_fallback_enabled": False,
-    "gates.allowed_setups": ["OB_WITH_BOS", "OB_WITH_ENGULFING"],
-    "risk.risk_per_trade_pct": 0.4,
-    "confluence.block_ranging_regime": True,
-    "exits.require_structural_tp_in_neutral": True,
-}
+FROZEN_CONSTRAINTS: dict[str, Any] = {}
 
 
 @dataclass(frozen=True)
@@ -67,14 +62,14 @@ def _validate_auto_execute_live(payload: dict[str, Any], errors: list[str]) -> N
         )
         return
 
+    # Keep a minimal set of hard safety requirements for any config that enables
+    # live auto-execution. Other limits (symbols, max orders, lot sizing mode)
+    # are treated as operator-configurable.
     required_for_auto_live: dict[str, Any] = {
         "runtime.mode": "live",
         "runtime.namespace": "prod",
         "execution.arming_required": True,
         "execution.live_confirmed": True,
-        "execution.max_orders_per_run": 1,
-        "execution.symbol_whitelist": ["EURUSD"],
-        "risk.fixed_lot_size": 0.01,
         "execution.debug_bypass": False,
         "execution.allow_overrides": False,
         "execution.retry_policy": "no_retry",

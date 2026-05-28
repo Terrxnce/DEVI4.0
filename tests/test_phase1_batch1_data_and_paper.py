@@ -42,6 +42,7 @@ class FakeSymbolInfo:
 class FakeMT5Client:
     TIMEFRAME_M15 = 15
     TIMEFRAME_H1 = 60
+    TIMEFRAME_H4 = 240
 
     def __init__(self) -> None:
         self.calls: list[str] = []

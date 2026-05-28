@@ -3,11 +3,16 @@ from __future__ import annotations
 import argparse
 import getpass
 import json
+import sys
+import traceback
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from src.config.loader import ConfigError, config_hash, load_config
+from src.ops.discord_notifier import DiscordNotifier
+
+_DISCORD = DiscordNotifier()
 from src.core.arming import ArmingService
 from src.core.enums import (
     ConfidenceTier,
@@ -105,7 +110,7 @@ def _validate_live_one_order_constraints(
     cfg: dict[str, Any],
     args: argparse.Namespace,
 ) -> str | None:
-    symbol_args = [s.upper() for s in args.symbol]
+    symbol_args = [str(s).strip() for s in args.symbol]
     if symbol_args != ["EURUSD"]:
         return "armed_run_symbol_must_be_eurusd_only"
     if int(args.max_orders) != 1:
@@ -117,8 +122,6 @@ def _validate_live_one_order_constraints(
 
     if int(execution_cfg.get("max_orders_per_run", 0)) != 1:
         return "config_max_orders_per_run_must_be_1"
-    if [str(s).upper() for s in execution_cfg.get("symbol_whitelist", [])] != ["EURUSD"]:
-        return "config_symbol_whitelist_must_be_eurusd_only"
     if str(instrument_cfg.get("symbol", "")).upper() != "EURUSD":
         return "config_instrument_symbol_must_be_eurusd"
     if abs(float(risk_cfg.get("fixed_lot_size", 0.0)) - 0.01) > 1e-9:
@@ -226,7 +229,7 @@ def _build_live_one_order_intent(
 
 
 def cmd_live_arm(args: argparse.Namespace) -> int:
-    symbols = [s.upper() for s in args.symbol]
+    symbols = [str(s).strip() for s in args.symbol]
     token = _LIVE_ARMING_SERVICE.arm(
         run_id=args.run_id,
         armed_by=getpass.getuser(),
@@ -540,7 +543,7 @@ def cmd_live_armed_run(args: argparse.Namespace) -> int:
         )
 
     arming_service = ArmingService()
-    symbols = [s.upper() for s in args.symbol]
+    symbols = [str(s).strip() for s in args.symbol]
     token = arming_service.arm(
         run_id=args.run_id,
         armed_by=getpass.getuser(),
@@ -735,7 +738,23 @@ def cmd_live_scan(args: argparse.Namespace) -> int:
     auto_execute_live = bool(cfg.get("execution", {}).get("auto_execute_live", False))
 
     # Arm
-    symbols = [s.upper() for s in args.symbol]
+    if args.symbol:
+        symbols = [str(s).strip() for s in args.symbol]
+    else:
+        # Prefer the symbol basket defined in config symbol_sessions.
+        # Fall back to MT5 Market Watch only if the config provides no basket.
+        cfg_symbol_sessions = cfg.get("symbol_sessions", {})
+        config_symbols = [s for s in cfg_symbol_sessions.keys() if s != "default"]
+        if config_symbols:
+            symbols = config_symbols
+        else:
+            source = None
+            try:
+                source = MT5DataSource()
+                symbols = source.list_market_watch_symbols()
+            finally:
+                if source is not None:
+                    source.close()
     token = _LIVE_ARMING_SERVICE.arm(
         run_id=args.run_id,
         armed_by="cli_operator",
@@ -773,9 +792,69 @@ def cmd_live_scan(args: argparse.Namespace) -> int:
                 logs_root=args.logs_root,
                 namespace=namespace,
                 symbols=symbols,
+                arming_service=_LIVE_ARMING_SERVICE,
             )
             session_result = session.run(run_id=args.run_id, token=token)
             session.close()
+
+            # Include per-symbol outcomes in JSON mode for debugging/ops visibility.
+            if session_result is not None:
+                per_symbol: list[dict[str, Any]] = []
+                for sym, sym_result in session_result.symbol_results.items():
+                    item: dict[str, Any] = {
+                        "symbol": sym,
+                        "decision": sym_result.decision.value,
+                        "failure_code": sym_result.failure_code,
+                        "bars_m15_count": sym_result.bars_m15_count,
+                        "bars_h1_count": sym_result.bars_h1_count,
+                        "tick_bid": sym_result.tick_bid,
+                        "tick_ask": sym_result.tick_ask,
+                        "snapshot_id": sym_result.snapshot_id,
+                    }
+                    if sym_result.paper_fill is not None:
+                        fill = sym_result.paper_fill
+                        item["order_status"] = fill.get("order_status")
+                        item["ticket"] = fill.get("ticket")
+                        item["broker_retcode"] = fill.get("broker_retcode")
+                        item["side"] = fill.get("side")
+                        item["lot_size"] = fill.get("lot_size")
+                        item["entry_price"] = fill.get("actual_fill") or fill.get("intended_entry")
+                        item["stop_loss"] = fill.get("sl")
+                        item["take_profit"] = fill.get("tp")
+                        item["setup_class"] = fill.get("setup_class", "")
+                        item["confidence_tier"] = fill.get("confidence_tier", "")
+                        # Compute RR if possible
+                        _entry = item["entry_price"]
+                        _sl = item["stop_loss"]
+                        _tp = item["take_profit"]
+                        _side = item["side"]
+                        if _entry and _sl and _tp and _side:
+                            try:
+                                if _side == "BULLISH":
+                                    _sl_dist = float(_entry) - float(_sl)
+                                    _tp_dist = float(_tp) - float(_entry)
+                                else:
+                                    _sl_dist = float(_sl) - float(_entry)
+                                    _tp_dist = float(_entry) - float(_tp)
+                                item["rr"] = round(_tp_dist / _sl_dist, 2) if _sl_dist > 0 else None
+                            except (TypeError, ZeroDivisionError):
+                                item["rr"] = None
+                    per_symbol.append(item)
+                result_payload["symbol_results"] = per_symbol
+
+                # Fire Discord signal for each confirmed fill this cycle
+                for _item in per_symbol:
+                    if _item.get("order_status") == "FILLED":
+                        _DISCORD.send_trade_signal(
+                            symbol=str(_item.get("symbol", "")),
+                            side=str(_item.get("side", "")),
+                            entry=float(_item.get("entry_price") or 0.0),
+                            sl=float(_item.get("stop_loss") or 0.0),
+                            tp=float(_item.get("take_profit") or 0.0),
+                            rr=_item.get("rr"),
+                            setup_class=str(_item.get("setup_class", "")),
+                            tier=str(_item.get("confidence_tier", "")),
+                        )
 
             # Extract first symbol result for reporting
             first_symbol = symbols[0] if symbols else ""
@@ -787,11 +866,35 @@ def cmd_live_scan(args: argparse.Namespace) -> int:
                 result_payload["tick_bid"] = sym_result.tick_bid
                 result_payload["tick_ask"] = sym_result.tick_ask
                 live_fill = sym_result.paper_fill
+                if sym_result.tp_debug is not None:
+                    found = sym_result.tp_debug.get("found", [])
+                    rejected = sym_result.tp_debug.get("rejected", [])
+                    result_payload["tp_debug"] = {
+                        "found_count": len(found),
+                        "rejected_count": len(rejected),
+                        "rejection_reasons": list({r.get("rejection_reason") for r in rejected if r.get("rejection_reason")}),
+                        "found": found,
+                        "rejected": rejected,
+                    }
 
             result_payload["open_position_count"] = session_result.open_position_count
             result_payload["account_balance"] = session_result.account_balance
             result_payload["account_equity"] = session_result.account_equity
             result_payload["execution_summary"] = session_result.execution_summary
+            result_payload["live_positions"] = [
+                {
+                    "ticket": p.ticket,
+                    "symbol": p.symbol,
+                    "side": p.side,
+                    "lot_size": p.lot_size,
+                    "open_price": p.open_price,
+                    "sl": p.sl,
+                    "tp": p.tp,
+                    "status": p.status,
+                }
+                for p in session_result.live_positions
+                if p.status == "OPEN"
+            ]
 
             if live_fill is not None:
                 result_payload["order_status"] = live_fill.get("order_status")
@@ -1283,7 +1386,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     live_scan = live_sub.add_parser("scan")
     _add_common(live_scan, include_mode=False)
-    live_scan.add_argument("--symbol", action="append", required=True)
+    live_scan.add_argument("--symbol", action="append", required=False, default=None)
     live_scan.add_argument("--max-orders", type=int, required=True)
     live_scan.add_argument("--ttl-minutes", type=int, default=30)
     live_scan.add_argument("--reason", default="")
@@ -1339,5 +1442,16 @@ def main() -> int:
         print(f"namespace_violation:{exc}")
         return 1
     except Exception as exc:  # pragma: no cover
-        print(f"fatal:{exc}")
+        tb = traceback.format_exc()
+        print(tb, file=sys.stderr)
+        if "--json" in sys.argv:
+            print(json.dumps({
+                "verdict": "FAIL",
+                "exit_code": 3,
+                "failure_code": "fatal_exception",
+                "reason": str(exc),
+                "traceback": tb,
+            }))
+        else:
+            print(f"fatal:{exc}")
         return 3

@@ -29,6 +29,19 @@ def evaluate_hard_rejects(context: ContextSnapshot, candidate_direction: Directi
         if "h1_contradiction" not in rejects:
             rejects.append("h1_contradiction")
 
+    # H4 macro bias: both H4 and H1 contradicting the setup is a hard reject.
+    # H4 alone contradicting is only a soft penalty (handled below).
+    h4_contradicts = (
+        context.trend_h4 != Direction.NEUTRAL
+        and context.trend_h4 != candidate_direction
+    )
+    h1_contradicts = (
+        context.trend_h1 != Direction.NEUTRAL
+        and context.trend_h1 != candidate_direction
+    )
+    if h4_contradicts and h1_contradicts:
+        rejects.append("h4_h1_double_contradiction")
+
     return sorted(set(rejects))
 
 
@@ -40,4 +53,11 @@ def evaluate_soft_penalties(context: ContextSnapshot, candidate_direction: Direc
         penalties.append("spread_elevated")
     if context.micro_window:
         penalties.append("micro_window")
+    # H4 macro bias contradicting the setup — soft penalty only.
+    # (H4 + H1 double contradiction is a hard reject handled above.)
+    if (
+        context.trend_h4 != Direction.NEUTRAL
+        and context.trend_h4 != candidate_direction
+    ):
+        penalties.append("h4_macro_contradiction")
     return penalties

@@ -13,22 +13,30 @@ from datetime import UTC, datetime
 from typing import Any
 
 from src.context.builder import build_context_snapshot
+from src.context.references import compute_reference_levels
+from src.context.session_levels import SessionLevelTracker
 from src.core.enums import FinalDecision, Namespace, Timeframe
-from src.core.models import Bar, DetectedStructure, SnapshotRecord, to_primitive
+from src.core.models import Bar, SnapshotRecord, to_primitive
 from src.data.mt5_source import MT5DataSource
 from src.decision.engine import evaluate_decision
-from src.detectors.break_of_structure import BreakOfStructureDetector
-from src.detectors.engulfing import EngulfingDetector
-from src.detectors.fair_value_gap import FairValueGapDetector
-from src.detectors.liquidity_sweep import LiquiditySweepDetector
-from src.detectors.order_block import OrderBlockDetector
-from src.detectors.rejection import RejectionDetector
 from src.core.runtime_state import RuntimeState
 from src.data.base import DataSourceError
 from src.execution.paper_adapter import PaperExecutionAdapter
 from src.execution.position_tracker import PaperPositionTracker
 from src.ops.telemetry import TelemetryWriter
 from src.context.regime import simple_atr
+from src.execution.structure_detectors import (
+    run_all_detectors,
+    scale_detection_cfg_for_higher_tf,
+)
+from src.core.enums import StructureType
+from src.risk.usd_correlation import count_usd_positions
+from src.zones.tracker import ZoneTracker
+
+
+_DEFAULT_M15_BAR_COUNT = 250
+_DEFAULT_H1_BAR_COUNT = 250
+_DEFAULT_H4_BAR_COUNT = 300
 
 
 @dataclass(frozen=True)
@@ -43,6 +51,7 @@ class SymbolResult:
     paper_fill: dict[str, Any] | None
     snapshot_id: str
     skipped_reason: str | None = None
+    tp_debug: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -70,69 +79,26 @@ class PaperSession:
         logs_root: str,
         namespace: Namespace,
         symbols: list[str] | None = None,
+        data_source: Any | None = None,
     ) -> None:
         self.config = config
         self.symbols = symbols or ["EURUSD", "GBPUSD", "AUDUSD", "NZDUSD"]
-        self.data = MT5DataSource()
+        self.data = data_source if data_source is not None else MT5DataSource(
+            broker_utc_offset_hours=int(config.get("broker_utc_offset_hours", 0))
+        )
         self.writer = TelemetryWriter(logs_root=logs_root, namespace=namespace)
         self.adapter = PaperExecutionAdapter()
         self.runtime_state = RuntimeState()
         self.position_tracker = PaperPositionTracker()
+        zone_age = int(
+            self.config.get("detection", {})
+            .get("order_block", {})
+            .get("max_age_bars", 50)
+        )
+        self._zone_tracker: ZoneTracker = ZoneTracker(max_zone_age_bars=zone_age)
 
     def close(self) -> None:
         self.data.close()
-
-    def _run_detectors(self, bars: list[Bar], atr: float) -> list[DetectedStructure]:
-        """Run all detectors on a single timeframe and collect structures."""
-        cfg = self.config["detection"]
-        current_idx = bars[-1].bar_index if bars else 0
-        structures: list[DetectedStructure] = []
-
-        ob = OrderBlockDetector(
-            min_body_atr_mult=cfg["order_block"]["min_body_atr_mult"],
-            max_age_bars=cfg["order_block"]["max_age_bars"],
-            min_quality=cfg["order_block"]["min_quality"],
-        )
-        structures.extend(ob.detect(bars, atr, current_idx))
-
-        bos = BreakOfStructureDetector(
-            min_swing_atr_mult=cfg["break_of_structure"]["min_swing_atr_mult"],
-            lookback_bars=cfg["break_of_structure"]["lookback_bars"],
-            min_quality=cfg["break_of_structure"]["min_quality"],
-        )
-        structures.extend(bos.detect(bars, atr))
-
-        fvg = FairValueGapDetector(
-            min_gap_atr_mult=cfg["fair_value_gap"]["min_gap_atr_mult"],
-            max_age_bars=cfg["fair_value_gap"]["max_age_bars"],
-            min_quality=cfg["fair_value_gap"]["min_quality"],
-        )
-        structures.extend(fvg.detect(bars, atr, current_idx))
-
-        sweep = LiquiditySweepDetector(
-            max_wick_atr_mult=cfg["sweep"]["max_wick_atr_mult"],
-            min_wick_body_ratio=cfg["sweep"]["min_wick_body_ratio"],
-            max_age_bars=cfg["sweep"]["max_age_bars"],
-            min_quality=cfg["sweep"]["min_quality"],
-        )
-        structures.extend(sweep.detect(bars, atr, current_idx))
-
-        rej = RejectionDetector(
-            min_wick_atr_mult=cfg["rejection"]["min_wick_atr_mult"],
-            min_wick_body_ratio=cfg["rejection"]["min_wick_body_ratio"],
-            max_age_bars=cfg["rejection"]["max_age_bars"],
-            min_quality=cfg["rejection"]["min_quality"],
-        )
-        structures.extend(rej.detect(bars, atr, current_idx))
-
-        eng = EngulfingDetector(
-            min_body_atr_mult=cfg["engulfing"]["min_body_atr_mult"],
-            max_age_bars=cfg["engulfing"]["max_age_bars"],
-            min_quality=cfg["engulfing"]["min_quality"],
-        )
-        structures.extend(eng.detect(bars, atr, current_idx))
-
-        return structures
 
     def _validate_profile(self, profile, symbol: str) -> str | None:
         """Validate critical instrument fields. Return skip reason or None if valid."""
@@ -216,8 +182,9 @@ class PaperSession:
 
         # 2. Fetch bars and tick
         try:
-            m15_bars = self.data.fetch_bars(symbol, Timeframe.M15, count=100)
-            h1_bars = self.data.fetch_bars(symbol, Timeframe.H1, count=50)
+            m15_bars = self.data.fetch_bars(symbol, Timeframe.M15, count=_DEFAULT_M15_BAR_COUNT)
+            h1_bars = self.data.fetch_bars(symbol, Timeframe.H1, count=_DEFAULT_H1_BAR_COUNT)
+            h4_bars = self.data.fetch_bars(symbol, Timeframe.H4, count=_DEFAULT_H4_BAR_COUNT)
             tick = self.data.fetch_tick(symbol)
         except DataSourceError as exc:
             return SymbolResult(
@@ -233,10 +200,39 @@ class PaperSession:
                 skipped_reason=str(exc),
             )
 
-        # 3. Detect structures
-        atr_period = int(self.config["detection"]["atr_period"])
+        # 3. Detect structures on M15 and H1
+        det_cfg = self.config["detection"]
+        atr_period = int(det_cfg["atr_period"])
         atr_m15 = simple_atr(m15_bars, atr_period) if len(m15_bars) >= atr_period else 0.001
-        structures = self._run_detectors(m15_bars, atr_m15)
+        m15_structures = run_all_detectors(detection_cfg=det_cfg, bars=m15_bars, atr=atr_m15)
+
+        h1_age_mult = float(det_cfg.get("h1_detection_age_multiplier", 2.5))
+        h1_det_cfg = scale_detection_cfg_for_higher_tf(det_cfg, h1_age_mult)
+        atr_h1 = simple_atr(h1_bars, atr_period) if len(h1_bars) >= atr_period else atr_m15
+        h1_structures = run_all_detectors(detection_cfg=h1_det_cfg, bars=h1_bars, atr=atr_h1)
+        raw_structures = [*m15_structures, *h1_structures]
+
+        # Zone tracker: update mitigation, expire old zones, register fresh detections.
+        # Returns only ACTIVE structures (OBs not closed through, BOS not yet consumed).
+        current_bar = m15_bars[-1] if m15_bars else None
+        if current_bar is not None:
+            self._zone_tracker.scan(symbol, raw_structures, current_bar)
+            structures = self._zone_tracker.get_active_structures(symbol)
+        else:
+            structures = raw_structures
+
+        # 3b. Wider TP structure pool — same detectors, larger max_age_bars.
+        # Used only for TP target anchoring. SL and confluence stay on the regular pool.
+        tp_age_mult = float(det_cfg.get("tp_detection_age_multiplier", 4.0))
+        tp_m15_det_cfg = scale_detection_cfg_for_higher_tf(det_cfg, tp_age_mult)
+        tp_m15_structures = run_all_detectors(detection_cfg=tp_m15_det_cfg, bars=m15_bars, atr=atr_m15)
+        tp_h1_det_cfg = scale_detection_cfg_for_higher_tf(det_cfg, h1_age_mult * tp_age_mult)
+        tp_h1_structures = run_all_detectors(detection_cfg=tp_h1_det_cfg, bars=h1_bars, atr=atr_h1)
+        tp_structures = [*tp_m15_structures, *tp_h1_structures]
+
+        # 3c. Build session levels for narrative layer
+        _session_tracker = SessionLevelTracker()
+        session_levels = _session_tracker.compute(m15_bars, self.config.get("sessions", {}))
 
         # 4. Build context
         spread = abs(tick["ask"] - tick["bid"])
@@ -248,6 +244,7 @@ class PaperSession:
             spread=spread,
             config=self.config,
         )
+        references = compute_reference_levels(m15_bars)
 
         # 5. Evaluate decision with runtime state
         entry_price = float(tick["ask"]) if context.trend_m15.value == "BULLISH" else float(tick["bid"])
@@ -256,9 +253,22 @@ class PaperSession:
             context=context,
             config=self.config,
             entry_price=entry_price,
+            references=references,
             atr_override=None,
-            risk_state={"account_balance": account_balance},
+            risk_state={
+                "account_balance": account_balance,
+                "open_positions_total": len(self.position_tracker.get_open_positions()),
+                "new_trades_session": self.runtime_state.trade_count,
+                "correlated_positions": 0,
+                "same_direction_correlated_positions": 0,
+                "usd_correlated_positions": count_usd_positions(
+                    [p.symbol for p in self.position_tracker.get_open_positions()]
+                ),
+            },
             runtime_state=self.runtime_state,
+            tp_structures=tp_structures,
+            session_levels=session_levels,
+            bars_h4=h4_bars,
         )
 
         decision_id = f"{run_id}_{symbol}_dec"
@@ -286,7 +296,7 @@ class PaperSession:
             m15_bars=m15_bars,
             h1_bars=h1_bars,
             atr_m15=atr_m15,
-            atr_h1=0.0,
+            atr_h1=atr_h1,
             spread=spread,
             detected_structures=structures,
             context_snapshot=context,
@@ -322,6 +332,21 @@ class PaperSession:
                     fill.trade_id,
                     outcome.trade_intent.risk_verdict.lot_size,
                 )
+
+            # Mark all BOS structures in the winning confluence as CONSUMED.
+            if outcome.confluence is not None and current_bar is not None:
+                all_confluence_structures = [
+                    outcome.confluence.primary_trigger,
+                    *outcome.confluence.structural_confirmations,
+                ]
+                for s in all_confluence_structures:
+                    if s is not None and s.structure_type == StructureType.BREAK_OF_STRUCTURE:
+                        self._zone_tracker.mark_bos_consumed(
+                            symbol=symbol,
+                            bar_index=s.bar_index,
+                            timeframe=s.timeframe,
+                            current_bar_index=current_bar.bar_index,
+                        )
 
         return SymbolResult(
             symbol=symbol,

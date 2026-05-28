@@ -71,14 +71,19 @@ def test_namespace_guard_blocks_eval_shadow_to_prod(tmp_path: Path) -> None:
         assert raised
 
 
-def test_frozen_config_constraints_reject_invalid_values() -> None:
+def test_frozen_config_constraints_are_empty() -> None:
+    # FROZEN_CONSTRAINTS was cleared when risk_per_trade_pct was moved to a
+    # configurable parameter. Verify that varying risk_per_trade_pct no longer
+    # triggers a frozen_constraint_violation.
+    from src.config.schema import FROZEN_CONSTRAINTS
+    assert FROZEN_CONSTRAINTS == {}, "FROZEN_CONSTRAINTS must be empty — no hardcoded value locks"
+
     config = json.loads(Path("src/config/defaults.json").read_text(encoding="utf-8"))
-    config["exits"]["rr_fallback_enabled"] = True
+    config["risk"]["risk_per_trade_pct"] = 0.1
 
     result = validate_config_dict(config)
 
-    assert not result.valid
-    assert any(err.startswith("frozen_constraint_violation:exits.rr_fallback_enabled") for err in result.errors)
+    assert not any("frozen_constraint_violation" in err for err in result.errors)
 
 
 def test_auto_execute_live_true_allowed_only_for_approved_prod_live_profile() -> None:

@@ -6,6 +6,7 @@ from enum import Enum
 class Timeframe(str, Enum):
     M15 = "M15"
     H1 = "H1"
+    H4 = "H4"
 
 
 class Direction(str, Enum):
@@ -42,6 +43,7 @@ class StructureType(str, Enum):
     LIQUIDITY_SWEEP = "LIQUIDITY_SWEEP"
     REJECTION = "REJECTION"
     ENGULFING = "ENGULFING"
+    JUDAS_SWEEP = "JUDAS_SWEEP"
 
 
 class SetupClass(str, Enum):
@@ -50,6 +52,9 @@ class SetupClass(str, Enum):
     OB_WITH_ENGULFING = "OB_WITH_ENGULFING"
     REJECTION_WITH_FVG = "REJECTION_WITH_FVG"
     SWEEP_WITH_OB = "SWEEP_WITH_OB"
+    JUDAS_WITH_OB = "JUDAS_WITH_OB"
+    SWEEP_REVERSAL_BULL = "SWEEP_REVERSAL_BULL"
+    SWEEP_REVERSAL_BEAR = "SWEEP_REVERSAL_BEAR"
 
 
 class ConfidenceTier(str, Enum):

@@ -214,6 +214,7 @@ def _send(
     runtime_state: RuntimeState | None = None,
     decision_spread: float = 0.0002,
     max_orders: int = 1,
+    kill_switch_enabled: bool = False,
 ) -> LiveOrderResult:
     return wrapper.send(
         intent,
@@ -222,6 +223,7 @@ def _send(
         runtime_state=runtime_state or RuntimeState(run_id="run_001"),
         decision_spread=decision_spread,
         max_orders_per_run=max_orders,
+        kill_switch_enabled=kill_switch_enabled,
     )
 
 
@@ -273,23 +275,33 @@ def test_blocked_when_kill_switch_triggered() -> None:
 
 
 def test_blocked_when_kill_switch_from_config() -> None:
+    """kill_switch_enabled=True in config must block execution via evaluate()."""
     ks = KillSwitch()
     wrapper = _make_wrapper()
+    # Pass the config flag through — wrapper now forwards it to ks.evaluate()
     result = _send(
         wrapper,
         _make_trade_intent(),
         kill_switch=ks,
+        kill_switch_enabled=True,
     )
-    # Default evaluate without config_kill_switch_enabled=False is fine
-    # but let's also test explicit config trigger
-    ks2 = KillSwitch()
-    # ks2.evaluate(config_kill_switch_enabled=True) would trigger
-    # However, the wrapper calls ks.evaluate() with no args.
-    # The kill switch already latches, so let's test via trigger.
-    ks2.trigger("config")
-    result2 = _send(wrapper, _make_trade_intent(), kill_switch=ks2)
-    assert result2.sent is False
-    assert "config" in result2.reason
+    assert result.sent is False
+    assert "blocked_kill_switch" in result.status
+    assert "config_kill_switch" in result.reason
+
+
+def test_kill_switch_config_false_does_not_block() -> None:
+    """kill_switch_enabled=False (default) must not block a clean kill switch."""
+    ks = KillSwitch()
+    wrapper = _make_wrapper(mt5_client=_MockMT5())
+    result = _send(
+        wrapper,
+        _make_trade_intent(),
+        kill_switch=ks,
+        kill_switch_enabled=False,
+    )
+    # Should reach broker (or be blocked by no mt5 client), not by kill switch
+    assert "blocked_kill_switch" not in result.status
 
 
 # --- Gate 3: Max Orders ---

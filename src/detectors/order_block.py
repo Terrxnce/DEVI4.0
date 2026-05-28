@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from src.core.enums import Direction, StructureType
 from src.core.models import Bar, DetectedStructure
 from src.detectors.base import (
-    adjusted_max_age,
     atr_relative,
     body,
     build_structure,
@@ -26,7 +25,9 @@ class OrderBlockDetector:
             return []
 
         current_idx = current_bar_index if current_bar_index is not None else bars[-1].bar_index
-        max_age = adjusted_max_age(self.max_age_bars, bars[-1].timeframe)
+        # TF scaling is applied before instantiation via scale_detection_cfg_for_higher_tf.
+        # Use self.max_age_bars directly — do not apply a second TF multiplier here.
+        max_age = float(self.max_age_bars)
 
         structures: list[DetectedStructure] = []
         for i in range(1, len(bars) - 1):

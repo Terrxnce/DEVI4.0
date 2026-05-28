@@ -37,12 +37,23 @@
       "min_body_atr_mult": 0.3,
       "max_age_bars": 3,
       "min_quality": 0.35
+    },
+    "judas_sweep": {
+      "enabled": false,
+      "max_age_bars": 8,
+      "min_quality": 0.45,
+      "sweep_buffer_atr_mult": 0.1
     }
   },
   "trend": {
-    "ema_periods": [21, 50, 200],
+    "ema_periods": [
+      21,
+      50,
+      200
+    ],
     "slope_lookback": 5,
-    "slope_threshold_atr_mult": 0.002
+    "adx_period": 14,
+    "adx_trend_threshold": 20.0
   },
   "regime": {
     "trending_threshold": 0.65,
@@ -100,7 +111,8 @@
     "max_open_positions_per_symbol": 1,
     "max_new_trades_per_session": 4,
     "max_correlated_positions": 2,
-    "same_direction_correlation_cap": 1
+    "same_direction_correlation_cap": 1,
+    "max_usd_correlated_positions": 99
   },
   "consecutive_loss": {
     "symbol_pause_after": 2,
@@ -109,8 +121,17 @@
   },
   "gates": {
     "mode": "enforce",
-    "allowed_setups": ["OB_WITH_BOS", "OB_WITH_ENGULFING"],
-    "symbols_disabled": ["US100"]
+    "allowed_setups": [
+      "OB_WITH_BOS",
+      "OB_WITH_ENGULFING"
+    ],
+    "symbols_disabled": [
+      "US100"
+    ]
+  },
+  "entry_gate": {
+    "proximity_gate_enabled": false,
+    "proximity_atr_mult": 0.5
   },
   "execution": {
     "mode": "MARKET",
@@ -130,21 +151,33 @@
     "_note": "Phase 2: per-symbol instrument profiles needed. EURUSD-only for Phase 1 paper.",
     "symbol": "EURUSD",
     "instrument_class": "FX",
-    "tick_size": 0.00001,
+    "tick_size": 1e-05,
     "lot_step": 0.01,
     "min_lot": 0.01,
     "max_lot": 100.0,
     "digits": 5,
-    "point": 0.00001,
+    "point": 1e-05,
     "contract_size": 100000.0,
     "noise_floor_atr_mult": 1.5,
     "spread_warn_atr_mult": 2.0,
     "stale_entry_atr_mult": 3.0
   },
   "sessions": {
-    "ASIA": {"start": "00:00", "end": "07:00"},
-    "LONDON": {"start": "07:00", "end": "12:00"},
-    "NY_AM": {"start": "12:00", "end": "16:00"},
-    "NY_PM": {"start": "16:00", "end": "20:00"}
+    "ASIA": {
+      "start": "00:00",
+      "end": "07:00"
+    },
+    "LONDON": {
+      "start": "07:00",
+      "end": "12:00"
+    },
+    "NY_AM": {
+      "start": "12:00",
+      "end": "16:00"
+    },
+    "NY_PM": {
+      "start": "16:00",
+      "end": "20:00"
+    }
   }
 }

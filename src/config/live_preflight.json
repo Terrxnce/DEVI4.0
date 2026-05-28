@@ -3,9 +3,14 @@
     "atr_period": 14
   },
   "trend": {
-    "ema_periods": [21, 50, 200],
+    "ema_periods": [
+      21,
+      50,
+      200
+    ],
     "slope_lookback": 5,
-    "slope_threshold_atr_mult": 0.002
+    "adx_period": 14,
+    "adx_trend_threshold": 20.0
   },
   "regime": {
     "trending_threshold": 0.65,
@@ -13,7 +18,8 @@
   },
   "confluence": {
     "block_ranging_regime": true,
-    "tier_c_tradable": false
+    "tier_c_tradable": false,
+    "atr_percentile_hard_reject": 0.8
   },
   "exits": {
     "min_rr": 1.5,
@@ -27,10 +33,17 @@
     "max_open_positions_total": 1,
     "max_open_positions_per_symbol": 1,
     "dynamic_lot_sizing": false,
-    "fixed_lot_size": 0.01
+    "fixed_lot_size": 0.01,
+    "block_new_trades_daily_pct": -3.0,
+    "force_close_daily_pct": -4.5,
+    "block_new_trades_total_pct": -8.0,
+    "force_close_total_pct": -9.5
   },
   "gates": {
-    "allowed_setups": ["OB_WITH_BOS", "OB_WITH_ENGULFING"]
+    "allowed_setups": [
+      "OB_WITH_BOS",
+      "OB_WITH_ENGULFING"
+    ]
   },
   "execution": {
     "mode": "MARKET",
@@ -44,8 +57,10 @@
     },
     "retry_policy": "no_retry",
     "deviation_points": 5,
-    "slippage_max": 0.00005,
-    "symbol_whitelist": ["EURUSD"],
+    "slippage_max": 5e-05,
+    "symbol_whitelist": [
+      "EURUSD"
+    ],
     "allow_overrides": false,
     "debug_bypass": false,
     "on_violation": "reject",
@@ -58,7 +73,8 @@
       "market_open": true,
       "risk": true
     },
-    "profile_note": "NO ORDER SEND PATH ACTIVE"
+    "profile_note": "NO ORDER SEND PATH ACTIVE",
+    "spread_max_pips": 3.0
   },
   "runtime": {
     "namespace": "prod",
@@ -70,13 +86,6 @@
     "min_lot": 0.01,
     "lot_step": 0.01,
     "max_lot": 0.01
-  },
-  "trading_window": {
-    "enabled": true,
-    "timezone": "UTC",
-    "days": ["MON", "TUE", "WED", "THU", "FRI"],
-    "start_utc": "07:00",
-    "end_utc": "07:15"
   },
   "telemetry": {
     "enabled": true,

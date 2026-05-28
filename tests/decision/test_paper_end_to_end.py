@@ -303,7 +303,7 @@ def test_live_mode_rejected_by_execution_gate() -> None:
     print(f"    failure_code: {outcome.failure_code}")
 
     assert outcome.final_decision == FinalDecision.REJECTED_EXECUTION
-    assert outcome.failure_code == "live_execution_not_allowed_phase1"
+    assert outcome.failure_code == "live_auto_execute_disabled"
     assert outcome.trade_intent is None
 
 

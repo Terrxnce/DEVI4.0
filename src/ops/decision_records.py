@@ -63,6 +63,12 @@ def build_decision_record(
             sl_distance_points = sl_distance_price / instrument_point
             sl_distance_pips = sl_distance_points / 10
 
+    setup_class = ""
+    confidence_tier = ""
+    if outcome.confluence is not None:
+        setup_class = outcome.confluence.setup_class.value if outcome.confluence.setup_class is not None else ""
+        confidence_tier = outcome.confluence.confidence_tier.value if outcome.confluence.confidence_tier is not None else ""
+
     record = DecisionRecord(
         run_id=run_id,
         scan_id=scan_id,
@@ -85,6 +91,8 @@ def build_decision_record(
         sl_distance_price=round(sl_distance_price, 5),
         sl_distance_points=round(sl_distance_points, 1),
         sl_distance_pips=round(sl_distance_pips, 2),
+        setup_class=setup_class,
+        confidence_tier=confidence_tier,
     )
 
     # Convert to dict, validate, and set correct validation fields

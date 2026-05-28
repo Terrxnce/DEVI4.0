@@ -25,7 +25,7 @@ def test_execution_gate_rejects_live_in_phase1() -> None:
     verdict = evaluate_execution(cfg)
 
     assert verdict.approved is False
-    assert verdict.reason == "live_execution_not_allowed_phase1"
+    assert verdict.reason == "live_not_confirmed_in_config"
 
 
 def test_execution_gate_rejects_invalid_mode() -> None:

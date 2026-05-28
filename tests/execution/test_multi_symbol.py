@@ -67,8 +67,8 @@ def test_multi_symbol_runs_deterministically() -> None:
         logs_root="/tmp/paper_test",
         namespace=Namespace.EVAL,
         symbols=["EURUSD", "GBPUSD"],
+        data_source=_make_fake_data(),
     )
-    session.data = _make_fake_data()
 
     result = session.run(run_id="multi_001")
     session.close()
@@ -87,8 +87,8 @@ def test_missing_critical_data_skips_symbol() -> None:
         logs_root="/tmp/paper_test",
         namespace=Namespace.EVAL,
         symbols=["EURUSD"],
+        data_source=_make_fake_data(point=0.0),
     )
-    session.data = _make_fake_data(point=0.0)
 
     result = session.run(run_id="skip_001")
     session.close()
@@ -107,8 +107,8 @@ def test_runtime_state_tracks_across_symbols() -> None:
         logs_root="/tmp/paper_test",
         namespace=Namespace.EVAL,
         symbols=["EURUSD", "GBPUSD", "AUDUSD", "NZDUSD"],
+        data_source=_make_fake_data(),
     )
-    session.data = _make_fake_data()
 
     result = session.run(run_id="track_001")
     session.close()
@@ -126,8 +126,8 @@ def test_no_duplicate_decision_ids() -> None:
         logs_root="/tmp/paper_test",
         namespace=Namespace.EVAL,
         symbols=["EURUSD", "GBPUSD"],
+        data_source=_make_fake_data(),
     )
-    session.data = _make_fake_data()
 
     result = session.run(run_id="dup_001")
     session.close()
@@ -145,8 +145,8 @@ def test_max_orders_enforced_across_symbols() -> None:
         logs_root="/tmp/paper_test",
         namespace=Namespace.EVAL,
         symbols=["EURUSD", "GBPUSD"],
+        data_source=_make_fake_data(),
     )
-    session.data = _make_fake_data()
 
     result = session.run(run_id="max_001")
     session.close()

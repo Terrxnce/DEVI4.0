@@ -15,6 +15,7 @@ STRUCTURAL_LABELS: dict[StructureType, str] = {
     StructureType.FAIR_VALUE_GAP: "fvg_confirmation",
     StructureType.REJECTION: "rejection_confirmation",
     StructureType.LIQUIDITY_SWEEP: "liquidity_sweep_confirmation",
+    StructureType.JUDAS_SWEEP: "judas_sweep_confirmation",
 }
 
 
@@ -26,6 +27,10 @@ class ConfluenceConfig:
     tier_c_tradable: bool
     triple_penalty_quality_floor: float
     block_ranging_regime: bool
+    # Hard reject when ATR percentile exceeds this threshold.
+    # 0.80 = block when volatility is in the top 20% of recent range.
+    # Default 1.0 = never block (backward compatible).
+    atr_percentile_hard_reject: float = 1.0
 
 
 
@@ -74,6 +79,9 @@ def evaluate_confluence(
         candidate_direction=candidate.direction,
         block_ranging_regime=config.block_ranging_regime,
     )
+    if context.atr_percentile >= config.atr_percentile_hard_reject:
+        hard_rejects.append("atr_percentile_too_high")
+
     soft_penalties = evaluate_soft_penalties(context=context, candidate_direction=candidate.direction)
     if context.atr_percentile < 0.25:
         soft_penalties.append("low_volatility")

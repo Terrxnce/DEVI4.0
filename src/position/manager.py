@@ -42,10 +42,6 @@ def build_trade_intent(
     if risk_verdict.lot_size <= 0:
         return PositionManagementVerdict(approved=False, reason="invalid_lot_size", trade_intent=None)
 
-    management_cfg = config.get("exits", {}).get("management", {})
-    if bool(management_cfg.get("partials_enabled", False)):
-        return PositionManagementVerdict(approved=False, reason="partials_not_supported_phase1", trade_intent=None)
-
     intent = TradeIntent(
         trade_id=_trade_id(
             symbol=context.symbol,

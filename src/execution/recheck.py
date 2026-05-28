@@ -135,12 +135,14 @@ class PreTradeRecheck:
         *,
         decision_spread: float,
         max_widening_factor: float = 2.0,
+        spread_max_price: float | None = None,
     ) -> RecheckVerdict:
         """Verify current spread has not widened beyond tolerance.
 
         Failure codes:
-            spread_widened  – current > decision * max_widening_factor
-            spread_zero     – current spread is zero (suspicious)
+            spread_widened      – current > decision * max_widening_factor
+            spread_zero         – current spread is zero (suspicious)
+            spread_cap_exceeded – current spread > absolute cap (spread_max_price)
         """
         if self._data is None:
             return RecheckVerdict(passed=False, reason="recheck_no_data_source")
@@ -150,6 +152,12 @@ class PreTradeRecheck:
 
         if current_spread == 0:
             return RecheckVerdict(passed=False, reason="spread_zero")
+
+        if spread_max_price is not None and current_spread > spread_max_price:
+            return RecheckVerdict(
+                passed=False,
+                reason=f"spread_cap_exceeded:{current_spread:.5f}>{spread_max_price:.5f}",
+            )
 
         if current_spread > decision_spread * max_widening_factor:
             return RecheckVerdict(
@@ -189,10 +197,29 @@ class PreTradeRecheck:
                 reason=f"equity_below_threshold:{equity:.2f}<{balance * equity_min_factor:.2f}",
             )
 
-        # Rough margin estimate (1% leverage assumption)
+        # Margin estimate — use MT5 order_calc_margin when available (accurate,
+        # handles all currency pairs and account currencies correctly).
+        # Fall back to a conservative per-lot estimate ($1,000/lot at ~100:1
+        # leverage) that does NOT use entry_price, avoiding the JPY-cross bug
+        # where a 115-handle JPY price was being multiplied as if it were USD.
         lot_size = intent.risk_verdict.lot_size
-        margin_required = intent.entry_price * lot_size * 100000.0 / 100.0
-        if free_margin < margin_required:
+        mt5_client = getattr(self._data, "mt5_client", None)
+        order_calc_margin = getattr(mt5_client, "order_calc_margin", None) if mt5_client else None
+        margin_required = 0.0
+        if callable(order_calc_margin):
+            try:
+                import MetaTrader5 as _mt5  # type: ignore
+                action = _mt5.ORDER_TYPE_BUY if intent.direction.value == "BULLISH" else _mt5.ORDER_TYPE_SELL
+                calc = order_calc_margin(action, intent.symbol, lot_size, intent.entry_price)
+                margin_required = float(calc) if calc is not None else 0.0
+            except Exception:
+                margin_required = lot_size * 1000.0
+        else:
+            # Safe fallback: ~$1,000 per standard lot at 100:1 leverage.
+            # Conservative enough to catch genuine margin shortfalls without
+            # false-positives from currency conversion errors.
+            margin_required = lot_size * 1000.0
+        if margin_required > 0 and free_margin < margin_required:
             return RecheckVerdict(
                 passed=False,
                 reason=f"insufficient_margin:{free_margin:.2f}<{margin_required:.2f}",
@@ -207,6 +234,7 @@ class PreTradeRecheck:
         max_lot_deviation_pct: float = 20.0,
         dynamic_lot_sizing: bool = True,
         fixed_lot_size: float | None = None,
+        risk_pct: float = 0.01,
     ) -> RecheckVerdict:
         """Re-run lot sizing and verify deviation from intent is small.
 
@@ -263,13 +291,20 @@ class PreTradeRecheck:
         current_balance = account.get("balance", 0.0)
         contract_size = _get("contract_size") or 100000.0
 
-        # Simplified lot sizing: risk 1% of balance, 1:1 RRR for quick calc
-        risk_amount = current_balance * 0.01
+        # Re-derive lot using the configured risk %, same formula as the risk module.
+        # Caller must pass the actual risk_pct from config to avoid spurious deviation failures.
+        risk_amount = current_balance * risk_pct
         sl_distance = abs(intent.entry_price - intent.exit_plan.stop_loss)
         if sl_distance <= 0:
             return RecheckVerdict(passed=False, reason="lot_size_deviation:sl_zero")
 
-        tick_value = point * contract_size
+        # Use actual tick_value from instrument profile (in account currency per tick per lot).
+        # This matches the risk evaluator's formula and avoids the systematic deviation
+        # on non-USD-quote pairs (e.g. GBPCHF tick_value ~1.275 USD, not 1.0).
+        # tick_value = point * contract_size was wrong for any pair where quote != USD.
+        tick_value_from_profile = _get("tick_value") or 1.0
+        tick_size_profile = _get("tick_size") or point
+        tick_value = tick_value_from_profile * (point / tick_size_profile)
         ticks_at_risk = sl_distance / point
         raw_lot = risk_amount / (ticks_at_risk * tick_value)
         recalculated_lot = max(min_lot, min(max_lot, round(raw_lot / lot_step) * lot_step))
@@ -360,10 +395,12 @@ class PreTradeRecheck:
         decision_spread: float,
         dynamic_lot_sizing: bool = True,
         fixed_lot_size: float | None = None,
+        risk_pct: float = 0.01,
+        spread_max_price: float | None = None,
     ) -> RecheckVerdict:
         """Run all 5 rechecks in order. Return first failure or pass."""
         checks = [
-            ("spread", lambda: self.recheck_spread(intent, decision_spread=decision_spread)),
+            ("spread", lambda: self.recheck_spread(intent, decision_spread=decision_spread, spread_max_price=spread_max_price)),
             ("account", lambda: self.recheck_account(intent)),
             (
                 "risk",
@@ -371,6 +408,7 @@ class PreTradeRecheck:
                     intent,
                     dynamic_lot_sizing=dynamic_lot_sizing,
                     fixed_lot_size=fixed_lot_size,
+                    risk_pct=risk_pct,
                 ),
             ),
             ("symbol", lambda: self.recheck_symbol(intent)),

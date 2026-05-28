@@ -16,6 +16,8 @@ class RiskState:
     new_trades_session: int = 0
     correlated_positions: int = 0
     same_direction_correlated_positions: int = 0
+    usd_correlated_positions: int = 0
+    jpy_correlated_positions: int = 0
     account_balance: float = 10000.0
 
 
@@ -32,6 +34,8 @@ def _coerce_state(state: dict[str, Any] | None) -> RiskState:
         new_trades_session=int(state.get("new_trades_session", 0)),
         correlated_positions=int(state.get("correlated_positions", 0)),
         same_direction_correlated_positions=int(state.get("same_direction_correlated_positions", 0)),
+        usd_correlated_positions=int(state.get("usd_correlated_positions", 0)),
+        jpy_correlated_positions=int(state.get("jpy_correlated_positions", 0)),
         account_balance=float(state.get("account_balance", 10000.0)),
     )
 
@@ -44,22 +48,34 @@ def _calculate_lot_size(
     entry_price: float,
     stop_loss: float,
     point: float,
-    contract_size: float,
+    tick_size: float,
+    tick_value: float,
     lot_step: float,
     min_lot: float,
     max_lot: float,
 ) -> float:
-    """Calculate lot size from risk parameters."""
-    if entry_price <= 0 or stop_loss <= 0 or point <= 0 or contract_size <= 0:
+    """Calculate lot size from risk parameters.
+
+    Uses MT5 trade_tick_value (already in account currency) to derive the
+    per-point value in account currency, which works correctly for all pairs
+    including JPY crosses where the quote currency is not the account currency.
+
+    Formula:
+        point_value = tick_value * (point / tick_size)
+        loss_per_lot = sl_points * point_value
+        lot_size = risk_amount / loss_per_lot
+    """
+    if entry_price <= 0 or stop_loss <= 0 or point <= 0 or tick_size <= 0 or tick_value <= 0:
         return 0.0
 
     risk_amount = balance * (risk_pct / 100.0)
     sl_distance = abs(entry_price - stop_loss)
     sl_points = sl_distance / point
 
-    # Value of 1 point per 1.0 lot = contract_size * point (in quote currency)
-    # For EURUSD with USD account: 100000 * 0.00001 = 1.0 USD per point per lot
-    point_value = contract_size * point
+    # tick_value is in account currency per tick per lot (from MT5 trade_tick_value).
+    # Scaling by (point / tick_size) gives the value per point per lot.
+    # For most FX pairs point == tick_size so the ratio is 1.0.
+    point_value = tick_value * (point / tick_size)
 
     if point_value <= 0 or sl_points <= 0:
         return 0.0
@@ -83,13 +99,14 @@ def _risk_deviation(
     stop_loss: float,
     lot_size: float,
     point: float,
-    contract_size: float,
+    tick_size: float,
+    tick_value: float,
 ) -> float:
     """Return absolute deviation between intended and actual risk percentage."""
     risk_amount = balance * (risk_pct / 100.0)
     sl_distance = abs(entry_price - stop_loss)
     sl_points = sl_distance / point
-    point_value = contract_size * point
+    point_value = tick_value * (point / tick_size)
     loss_per_lot = sl_points * point_value
     actual_risk_amount = lot_size * loss_per_lot
     if risk_amount <= 0:
@@ -141,10 +158,38 @@ def evaluate_risk(
     if snapshot.same_direction_correlated_positions >= int(risk_cfg["same_direction_correlation_cap"]):
         return RiskVerdict(False, 0.0, 0.0, intended_risk, "same_direction_correlation_cap")
 
+    # USD correlation cap: limits total open positions where USD is one leg.
+    # Prevents over-concentration on USD-driven macro moves (e.g. NFP, FOMC).
+    # Optional: only enforced when max_usd_correlated_positions key is present.
+    usd_cap = risk_cfg.get("max_usd_correlated_positions")
+    if usd_cap is not None and snapshot.usd_correlated_positions >= int(usd_cap):
+        return RiskVerdict(False, 0.0, 0.0, intended_risk, "usd_correlation_cap")
+
+    # JPY correlation cap: limits total open positions where JPY is one leg.
+    # Prevents stacking USDJPY + CADJPY + EURJPY into the same BoJ/JPY macro move.
+    # Optional: only enforced when max_jpy_correlated_positions key is present.
+    jpy_cap = risk_cfg.get("max_jpy_correlated_positions")
+    if jpy_cap is not None and snapshot.jpy_correlated_positions >= int(jpy_cap):
+        return RiskVerdict(False, 0.0, 0.0, intended_risk, "jpy_correlation_cap")
+
+    # Fixed lot mode - skip dynamic calculation, use configured lot directly.
+    # Drawdown and position guards above still apply.
+    if not bool(risk_cfg.get("dynamic_lot_sizing", True)):
+        fixed_lot = float(risk_cfg.get("fixed_lot_size", 0.01))
+        if fixed_lot <= 0:
+            return RiskVerdict(False, 0.0, 0.0, intended_risk, "fixed_lot_invalid")
+        instrument_cfg = config.get("instrument", {})
+        min_lot = float(instrument_cfg.get("min_lot", 0.01))
+        max_lot = float(instrument_cfg.get("max_lot", 100.0))
+        if fixed_lot < min_lot or fixed_lot > max_lot:
+            return RiskVerdict(False, 0.0, 0.0, intended_risk, "fixed_lot_out_of_bounds")
+        return RiskVerdict(True, fixed_lot, intended_risk, intended_risk, "fixed_lot_approved")
+
     # Lot sizing with instrument profile from config
     instrument_cfg = config.get("instrument", {})
     point = float(instrument_cfg.get("point", 0.00001))
-    contract_size = float(instrument_cfg.get("contract_size", 100000.0))
+    tick_size = float(instrument_cfg.get("tick_size", point))
+    tick_value = float(instrument_cfg.get("tick_value", 1.0))
     lot_step = float(instrument_cfg.get("lot_step", 0.01))
     min_lot = float(instrument_cfg.get("min_lot", 0.01))
     max_lot = float(instrument_cfg.get("max_lot", 100.0))
@@ -160,7 +205,8 @@ def evaluate_risk(
         entry_price=entry_price,
         stop_loss=stop_loss,
         point=point,
-        contract_size=contract_size,
+        tick_size=tick_size,
+        tick_value=tick_value,
         lot_step=lot_step,
         min_lot=min_lot,
         max_lot=max_lot,
@@ -177,7 +223,8 @@ def evaluate_risk(
         stop_loss=stop_loss,
         lot_size=lot_size,
         point=point,
-        contract_size=contract_size,
+        tick_size=tick_size,
+        tick_value=tick_value,
     )
     if deviation > 0.20:
         return RiskVerdict(False, 0.0, 0.0, intended_risk, "risk_deviation_exceeded")

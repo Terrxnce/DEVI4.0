@@ -20,6 +20,9 @@ SETUP_CATALOG: dict[SetupClass, tuple[StructureType, StructureType]] = {
     SetupClass.OB_WITH_FVG: (StructureType.ORDER_BLOCK, StructureType.FAIR_VALUE_GAP),
     SetupClass.REJECTION_WITH_FVG: (StructureType.REJECTION, StructureType.FAIR_VALUE_GAP),
     SetupClass.SWEEP_WITH_OB: (StructureType.LIQUIDITY_SWEEP, StructureType.ORDER_BLOCK),
+    # Judas Sweep primary: Asian range manipulation signal; OB confirms entry zone.
+    # The proximity gate applies to the OB in structural_confirmations, same as SWEEP_WITH_OB.
+    SetupClass.JUDAS_WITH_OB: (StructureType.JUDAS_SWEEP, StructureType.ORDER_BLOCK),
 }
 
 

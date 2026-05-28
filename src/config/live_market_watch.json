@@ -1,0 +1,375 @@
+{
+  "_description": "Live profile: trade all Market Watch symbols, all setups, dynamic lot sizing capped by risk_per_trade_pct.",
+  "broker_utc_offset_hours": 3,
+  "pipeline": {
+    "enable_full_phase1_flow": true
+  },
+  "detection": {
+    "atr_period": 14,
+    "h1_detection_age_multiplier": 2.5,
+    "tp_detection_age_multiplier": 4.0,
+    "order_block": {
+      "min_body_atr_mult": 0.5,
+      "max_age_bars": 20,
+      "min_quality": 0.6
+    },
+    "break_of_structure": {
+      "min_swing_atr_mult": 1.0,
+      "lookback_bars": 5,
+      "min_quality": 0.5
+    },
+    "fair_value_gap": {
+      "min_gap_atr_mult": 0.3,
+      "max_age_bars": 10,
+      "min_quality": 0.5
+    },
+    "sweep": {
+      "max_wick_atr_mult": 1.5,
+      "min_wick_body_ratio": 2.0,
+      "max_age_bars": 5,
+      "min_quality": 0.5
+    },
+    "rejection": {
+      "min_wick_atr_mult": 0.5,
+      "min_wick_body_ratio": 2.0,
+      "max_age_bars": 3,
+      "min_quality": 0.5
+    },
+    "engulfing": {
+      "min_body_atr_mult": 0.3,
+      "max_age_bars": 3,
+      "min_quality": 0.5
+    },
+    "judas_sweep": {
+      "enabled": true,
+      "max_age_bars": 8,
+      "min_quality": 0.45,
+      "sweep_buffer_atr_mult": 0.1
+    }
+  },
+  "trend": {
+    "ema_periods": [
+      21,
+      50,
+      200
+    ],
+    "slope_lookback": 5,
+    "adx_period": 14,
+    "adx_trend_threshold": 20.0
+  },
+  "regime": {
+    "trending_threshold": 0.65,
+    "expanding_threshold": 0.85
+  },
+  "confluence": {
+    "tier_a_min_confirmations": 2,
+    "tier_b_min_confirmations": 1,
+    "tier_c_min_confirmations": 1,
+    "triple_penalty_quality_floor": 0.65,
+    "block_ranging_regime": false,
+    "tier_c_tradable": true,
+    "atr_percentile_hard_reject": 0.8
+  },
+  "exits": {
+    "min_rr": 1.2,
+    "min_rr_preferred": 1.5,
+    "min_rr_neutral": 1.2,
+    "rr_fallback_enabled": false,
+    "require_structural_tp_in_neutral": true,
+    "sl_buffer_atr_mult": 0.1,
+    "atr_fallback_sl_mult": 1.5,
+    "min_sl_atr_mult": 0.5,
+    "min_sl_pips": 8,
+    "min_sl_spread_mult": 2.0,
+    "min_sl_quality": 0.6,
+    "min_sl_depth_atr_trending": 1.5,
+    "min_sl_depth_atr_neutral": 1.2,
+    "sl_h1_tf_weight": 1.15,
+    "m15_tp_search_atr": 6.0,
+    "h1_tp_search_atr": 10.0,
+    "tp_h1_expand_mult": 1.25,
+    "tp_h1_expand_mult_max": 1.4,
+    "tp_h1_search_hard_cap_atr": 10.0,
+    "tp_h1_base_relevance": 0.85,
+    "tp_max_age_bars": 250,
+    "swing_tp_enabled": true,
+    "swing_tp_type_weight": 0.65,
+    "swing_tp_max_range_atr": 10.0,
+    "swing_tp_min_quality": 0.4,
+    "swing_tp_overlap_atr": 0.3,
+    "swing_tp_max_candidates": 3,
+    "management": {
+      "partials_enabled": true,
+      "trailing_enabled": true,
+      "session_close_exit": true,
+      "breakeven_at_r": 1.0
+    }
+  },
+  "risk": {
+    "risk_per_trade_pct": 0.5,
+    "soft_daily_reduction_pct": -1.5,
+    "block_new_trades_daily_pct": -3.0,
+    "force_close_daily_pct": -4.5,
+    "block_new_trades_total_pct": -8.0,
+    "force_close_total_pct": -9.5,
+    "allow_multiple_positions": true,
+    "max_open_positions_total": 7,
+    "max_open_positions_per_symbol": 1,
+    "max_new_trades_per_session": 7,
+    "max_correlated_positions": 7,
+    "same_direction_correlation_cap": 5,
+    "dynamic_lot_sizing": true,
+    "max_usd_correlated_positions": 3,
+    "max_jpy_correlated_positions": 2
+  },
+  "gates": {
+    "allowed_setups": [
+      "OB_WITH_BOS",
+      "OB_WITH_FVG",
+      "SWEEP_WITH_OB",
+      "JUDAS_WITH_OB",
+      "SWEEP_REVERSAL_BULL",
+      "SWEEP_REVERSAL_BEAR"
+    ]
+  },
+  "entry_gate": {
+    "proximity_gate_enabled": true,
+    "proximity_atr_mult": 0.5
+  },
+  "execution": {
+    "mode": "MARKET",
+    "auto_execute_live": true,
+    "live_confirmed": true,
+    "arming_required": true,
+    "max_orders_per_run": 7,
+    "kill_switch_enabled": false,
+    "kill_switch_threshold": {
+      "max_failed_orders_last_10m": 2
+    },
+    "retry_policy": "no_retry",
+    "deviation_points": 5,
+    "slippage_max": 5e-05,
+    "allow_overrides": false,
+    "debug_bypass": false,
+    "on_violation": "reject",
+    "pre_trade_rechecks": {
+      "spread": true,
+      "slippage": true,
+      "margin": true,
+      "symbol": true,
+      "session": true,
+      "market_open": true,
+      "risk": true
+    },
+    "spread_max_pips": 5.0
+  },
+  "runtime": {
+    "namespace": "prod",
+    "mode": "live",
+    "logs_root": "logs"
+  },
+  "instrument": {
+    "_note": "Placeholder. LiveSession injects per-symbol MT5 profile into the risk config at runtime."
+  },
+  "sessions": {
+    "ASIA": {
+      "start": "00:00",
+      "end": "06:00"
+    },
+    "LONDON": {
+      "start": "07:00",
+      "end": "11:30"
+    },
+    "NY_AM": {
+      "start": "13:00",
+      "end": "16:00"
+    },
+    "NY_PM": {
+      "start": "16:00",
+      "end": "19:00"
+    }
+  },
+  "economic_calendar": {
+    "enabled": true,
+    "pre_event_minutes": 30,
+    "post_event_minutes": 15,
+    "block_on_fetch_failure": true,
+    "cache_ttl_hours": 12.0
+  },
+  "ftmo": {
+    "initial_balance": 100000.0,
+    "max_daily_loss_pct": 0.05,
+    "max_total_loss_pct": 0.1,
+    "daily_buffer_pct": 0.005,
+    "total_buffer_pct": 0.005
+  },
+  "telemetry": {
+    "enabled": true,
+    "write_decisions": true,
+    "write_live_orders": true,
+    "write_trades": true,
+    "write_snapshots": true,
+    "fail_on_write_error": true
+  },
+  "supabase": {
+    "enabled": true,
+    "account_id": "ftmo_challenge_1"
+  },
+  "symbol_sessions": {
+    "default": [
+      "ASIA",
+      "LONDON",
+      "NY_AM",
+      "NY_PM"
+    ],
+    "AUDJPY": [
+      "ASIA"
+    ],
+    "AUDUSD": [
+      "ASIA",
+      "NY_AM"
+    ],
+    "NZDJPY": [
+      "ASIA"
+    ],
+    "USDJPY": [
+      "ASIA",
+      "NY_AM"
+    ],
+    "AUDNZD": [
+      "ASIA"
+    ],
+    "NZDUSD": [
+      "ASIA",
+      "LONDON"
+    ],
+    "AUDCAD": [
+      "ASIA"
+    ],
+    "AUDCHF": [
+      "ASIA",
+      "LONDON"
+    ],
+    "NZDCAD": [
+      "ASIA",
+      "LONDON"
+    ],
+    "NZDCHF": [
+      "ASIA",
+      "LONDON"
+    ],
+    "CADJPY": [
+      "ASIA"
+    ],
+    "CHFJPY": [
+      "ASIA",
+      "LONDON"
+    ],
+    "EURUSD": [
+      "LONDON",
+      "NY_AM",
+      "NY_PM"
+    ],
+    "GBPUSD": [
+      "LONDON",
+      "NY_AM",
+      "NY_PM"
+    ],
+    "EURJPY": [
+      "LONDON"
+    ],
+    "GBPJPY": [
+      "ASIA",
+      "LONDON"
+    ],
+    "EURGBP": [
+      "LONDON",
+      "NY_AM"
+    ],
+    "EURCAD": [
+      "LONDON",
+      "NY_AM"
+    ],
+    "EURCHF": [
+      "LONDON",
+      "NY_AM"
+    ],
+    "EURAUD": [
+      "LONDON",
+      "NY_AM"
+    ],
+    "EURNZD": [
+      "LONDON",
+      "NY_AM"
+    ],
+    "GBPCAD": [
+      "LONDON",
+      "NY_AM"
+    ],
+    "GBPCHF": [
+      "LONDON",
+      "NY_AM"
+    ],
+    "GBPAUD": [
+      "LONDON",
+      "NY_AM"
+    ],
+    "GBPNZD": [
+      "LONDON",
+      "NY_AM"
+    ],
+    "USDCAD": [
+      "LONDON",
+      "NY_AM",
+      "NY_PM"
+    ],
+    "USDCHF": [
+      "LONDON",
+      "NY_AM",
+      "NY_PM"
+    ],
+    "XAUUSD": [
+      "LONDON",
+      "NY_AM"
+    ],
+    "XAGUSD": [
+      "LONDON",
+      "NY_AM"
+    ],
+    "US30.cash": [
+      "NY_AM",
+      "NY_PM"
+    ],
+    "US100.cash": [
+      "NY_AM",
+      "NY_PM"
+    ],
+    "US500.cash": [
+      "NY_AM",
+      "NY_PM"
+    ],
+    "JP225.cash": [
+      "ASIA",
+      "NY_AM"
+    ]
+  },
+  "trading_window": {
+    "enabled": true,
+    "timezone": "UTC",
+    "days": [
+      "MON",
+      "TUE",
+      "WED",
+      "THU",
+      "FRI"
+    ],
+    "start_utc": "00:00",
+    "end_utc": "19:00"
+  },
+  "narrative": {
+    "narrative_mode": true,
+    "h4_context_gate": false,
+    "min_fvg_quality": 0.35,
+    "retrace_tolerance_atr": 0.15
+  }
+}

@@ -1,6 +1,11 @@
 {
+  "pipeline": {
+    "enable_full_phase1_flow": true
+  },
   "detection": {
     "atr_period": 14,
+    "h1_detection_age_multiplier": 2.5,
+    "tp_detection_age_multiplier": 4.0,
     "order_block": {
       "min_body_atr_mult": 0.5,
       "max_age_bars": 20,
@@ -32,12 +37,23 @@
       "min_body_atr_mult": 0.3,
       "max_age_bars": 3,
       "min_quality": 0.5
+    },
+    "judas_sweep": {
+      "enabled": true,
+      "max_age_bars": 8,
+      "min_quality": 0.45,
+      "sweep_buffer_atr_mult": 0.1
     }
   },
   "trend": {
-    "ema_periods": [21, 50, 200],
+    "ema_periods": [
+      21,
+      50,
+      200
+    ],
     "slope_lookback": 5,
-    "slope_threshold_atr_mult": 0.002
+    "adx_period": 14,
+    "adx_trend_threshold": 20.0
   },
   "regime": {
     "trending_threshold": 0.65,
@@ -60,10 +76,11 @@
     "sl_buffer_atr_mult": 0.1,
     "atr_fallback_sl_mult": 1.5,
     "min_sl_atr_mult": 0.5,
+    "min_sl_pips": 8,
     "min_sl_spread_mult": 2.0,
     "min_sl_quality": 0.6,
     "min_sl_depth_atr_trending": 1.5,
-    "min_sl_depth_atr_neutral": 2.0,
+    "min_sl_depth_atr_neutral": 1.2,
     "sl_h1_tf_weight": 1.15,
     "m15_tp_search_atr": 6.0,
     "h1_tp_search_atr": 8.0,
@@ -82,18 +99,39 @@
       "trailing_enabled": true,
       "session_close_exit": true,
       "breakeven_at_r": 1.0
-    }
+    },
+    "tp_max_age_bars": 250
   },
   "risk": {
     "risk_per_trade_pct": 0.4,
     "allow_multiple_positions": false,
     "max_open_positions_total": 1,
     "max_open_positions_per_symbol": 1,
-    "dynamic_lot_sizing": true,
-    "fixed_lot_size": 0.01
+    "dynamic_lot_sizing": false,
+    "fixed_lot_size": 0.01,
+    "soft_daily_reduction_pct": -1.5,
+    "block_new_trades_daily_pct": -3.0,
+    "force_close_daily_pct": -4.5,
+    "block_new_trades_total_pct": -8.0,
+    "force_close_total_pct": -9.5,
+    "max_new_trades_per_session": 3,
+    "max_correlated_positions": 2,
+    "same_direction_correlation_cap": 1,
+    "max_usd_correlated_positions": 1
   },
   "gates": {
-    "allowed_setups": ["OB_WITH_BOS", "OB_WITH_ENGULFING"]
+    "allowed_setups": [
+      "OB_WITH_BOS",
+      "OB_WITH_ENGULFING",
+      "OB_WITH_FVG",
+      "REJECTION_WITH_FVG",
+      "SWEEP_WITH_OB",
+      "JUDAS_WITH_OB"
+    ]
+  },
+  "entry_gate": {
+    "proximity_gate_enabled": true,
+    "proximity_atr_mult": 0.5
   },
   "execution": {
     "mode": "MARKET",
@@ -101,14 +139,13 @@
     "live_confirmed": true,
     "arming_required": true,
     "max_orders_per_run": 1,
-    "kill_switch_enabled": true,
+    "kill_switch_enabled": false,
     "kill_switch_threshold": {
       "max_failed_orders_last_10m": 1
     },
     "retry_policy": "no_retry",
     "deviation_points": 5,
-    "slippage_max": 0.00005,
-    "symbol_whitelist": ["EURUSD"],
+    "slippage_max": 5e-05,
     "allow_overrides": false,
     "debug_bypass": false,
     "on_violation": "reject",
@@ -135,17 +172,36 @@
     "max_lot": 0.01
   },
   "sessions": {
-    "ASIA": {"start": "00:00", "end": "07:00"},
-    "LONDON": {"start": "07:00", "end": "12:00"},
-    "NY_AM": {"start": "12:00", "end": "16:00"},
-    "NY_PM": {"start": "16:00", "end": "20:00"}
+    "ASIA": {
+      "start": "00:00",
+      "end": "06:00"
+    },
+    "LONDON": {
+      "start": "07:00",
+      "end": "11:30"
+    },
+    "NY_AM": {
+      "start": "13:00",
+      "end": "16:00"
+    },
+    "NY_PM": {
+      "start": "16:00",
+      "end": "19:00"
+    }
   },
-  "trading_window": {
+  "economic_calendar": {
     "enabled": true,
-    "timezone": "UTC",
-    "days": ["MON", "TUE", "WED", "THU", "FRI"],
-    "start_utc": "07:00",
-    "end_utc": "16:00"
+    "pre_event_minutes": 30,
+    "post_event_minutes": 15,
+    "block_on_fetch_failure": true,
+    "cache_ttl_hours": 12.0
+  },
+  "ftmo": {
+    "initial_balance": 10000.0,
+    "max_daily_loss_pct": 0.05,
+    "max_total_loss_pct": 0.1,
+    "daily_buffer_pct": 0.005,
+    "total_buffer_pct": 0.005
   },
   "telemetry": {
     "enabled": true,
@@ -154,5 +210,155 @@
     "write_trades": true,
     "write_snapshots": true,
     "fail_on_write_error": true
+  },
+  "symbol_sessions": {
+    "default": [
+      "ASIA",
+      "LONDON",
+      "NY_AM",
+      "NY_PM"
+    ],
+    "AUDJPY": [
+      "ASIA"
+    ],
+    "AUDUSD": [
+      "ASIA",
+      "NY_AM"
+    ],
+    "NZDJPY": [
+      "ASIA"
+    ],
+    "USDJPY": [
+      "ASIA",
+      "NY_AM"
+    ],
+    "AUDNZD": [
+      "ASIA"
+    ],
+    "NZDUSD": [
+      "ASIA",
+      "LONDON"
+    ],
+    "AUDCAD": [
+      "ASIA"
+    ],
+    "AUDCHF": [
+      "ASIA",
+      "LONDON"
+    ],
+    "NZDCAD": [
+      "ASIA",
+      "LONDON"
+    ],
+    "NZDCHF": [
+      "ASIA",
+      "LONDON"
+    ],
+    "CADJPY": [
+      "ASIA"
+    ],
+    "CHFJPY": [
+      "ASIA",
+      "LONDON"
+    ],
+    "EURUSD": [
+      "LONDON",
+      "NY_AM",
+      "NY_PM"
+    ],
+    "GBPUSD": [
+      "LONDON",
+      "NY_AM",
+      "NY_PM"
+    ],
+    "EURJPY": [
+      "LONDON"
+    ],
+    "GBPJPY": [
+      "ASIA",
+      "LONDON"
+    ],
+    "EURGBP": [
+      "LONDON",
+      "NY_AM"
+    ],
+    "EURCAD": [
+      "LONDON",
+      "NY_AM"
+    ],
+    "EURCHF": [
+      "LONDON",
+      "NY_AM"
+    ],
+    "EURAUD": [
+      "LONDON",
+      "NY_AM"
+    ],
+    "EURNZD": [
+      "LONDON",
+      "NY_AM"
+    ],
+    "GBPCAD": [
+      "LONDON",
+      "NY_AM"
+    ],
+    "GBPCHF": [
+      "LONDON",
+      "NY_AM"
+    ],
+    "GBPAUD": [
+      "LONDON",
+      "NY_AM"
+    ],
+    "GBPNZD": [
+      "LONDON",
+      "NY_AM"
+    ],
+    "GER40": [
+      "LONDON",
+      "NY_AM"
+    ],
+    "UK100": [
+      "LONDON"
+    ],
+    "USDCAD": [
+      "LONDON",
+      "NY_AM",
+      "NY_PM"
+    ],
+    "USDCHF": [
+      "LONDON",
+      "NY_AM",
+      "NY_PM"
+    ],
+    "XAUUSD": [
+      "LONDON",
+      "NY_AM"
+    ],
+    "XAGUSD": [
+      "LONDON",
+      "NY_AM"
+    ],
+    "NAS100": [
+      "NY_AM",
+      "NY_PM"
+    ],
+    "US30": [
+      "NY_AM",
+      "NY_PM"
+    ]
+  },
+  "trading_window": {
+    "enabled": true,
+    "timezone": "UTC",
+    "days": [
+      "MON",
+      "TUE",
+      "WED",
+      "THU",
+      "FRI"
+    ],
+    "start_utc": "00:00",
+    "end_utc": "19:00"
   }
 }
