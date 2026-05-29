@@ -200,6 +200,7 @@ class MT5DataSource:
             "margin": float(getattr(info, "margin", 0.0)),
             "free_margin": float(getattr(info, "margin_free", 0.0)),
             "currency": str(getattr(info, "currency", "USD")),
+            "login": int(getattr(info, "login", 0)),
         }
 
     def fetch_symbol_info(self, symbol: str) -> dict[str, Any]:

@@ -349,6 +349,44 @@ class LiveSession:
 
         account = self.data.fetch_account_info()
 
+        # Auto-detect account switches — runs once per cycle but is cheap.
+        #
+        # Fix 1: initial_balance
+        #   If the config value differs from the live MT5 balance by more than 5%,
+        #   the operator loaded a different account. Use the live balance so FTMO
+        #   drawdown floors are always calculated against the correct starting point.
+        #
+        # Fix 2: Supabase account_id
+        #   Derive the namespace from the MT5 login number so dashboard data is
+        #   automatically separated per account — no manual config edits needed.
+        _live_balance = float(account["balance"])
+        _live_login = int(account.get("login", 0))
+        _ftmo_cfg_initial = float(self.config.get("ftmo", {}).get("initial_balance", _live_balance))
+        if _ftmo_cfg_initial > 0:
+            _balance_drift = abs(_live_balance - _ftmo_cfg_initial) / _ftmo_cfg_initial
+            if _balance_drift > 0.05:
+                logger.warning(
+                    "live_session: config initial_balance (%.2f) differs from live MT5 "
+                    "balance (%.2f) by %.1f%% — a different account may be loaded. "
+                    "Using live balance for FTMO drawdown calculations.",
+                    _ftmo_cfg_initial,
+                    _live_balance,
+                    _balance_drift * 100,
+                )
+                self.config.setdefault("ftmo", {})["initial_balance"] = _live_balance
+
+        if _live_login and self._supabase is not None:
+            _auto_account_id = f"ftmo_{_live_login}"
+            if self._supabase._account_id != _auto_account_id:
+                logger.info(
+                    "live_session: updating supabase account_id from '%s' to '%s' "
+                    "(derived from MT5 login %d)",
+                    self._supabase._account_id,
+                    _auto_account_id,
+                    _live_login,
+                )
+                self._supabase._account_id = _auto_account_id
+
         # Sync open positions from MT5 at the START of the run so we can skip
         # symbols that already have open positions and build real risk state.
         # Also detects and logs any positions that closed since the last scan.

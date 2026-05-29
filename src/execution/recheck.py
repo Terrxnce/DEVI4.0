@@ -10,8 +10,12 @@ Safety:
 """
 from __future__ import annotations
 
+import logging
+import math as _math
 from dataclasses import dataclass
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from src.core.models import TradeIntent
 
@@ -307,12 +311,37 @@ class PreTradeRecheck:
         tick_value = tick_value_from_profile * (point / tick_size_profile)
         ticks_at_risk = sl_distance / point
         raw_lot = risk_amount / (ticks_at_risk * tick_value)
-        recalculated_lot = max(min_lot, min(max_lot, round(raw_lot / lot_step) * lot_step))
+        # Use floor (matching the risk evaluator) to avoid rounding-direction
+        # discrepancies that produce spurious lot_size_deviation failures.
+        recalculated_lot = max(min_lot, min(max_lot, _math.floor((raw_lot / lot_step) + 1e-9) * lot_step))
 
         if intended_lot <= 0:
             return RecheckVerdict(passed=False, reason="lot_size_deviation:intent_zero")
 
         deviation = abs(recalculated_lot - intended_lot) / intended_lot * 100.0
+
+        # Diagnostic log — emitted on every dynamic risk recheck so we can identify
+        # the root cause of systematic deviation between decision-time and recheck-time
+        # lot sizes. Captures the inputs that differ between the two calculations.
+        logger.debug(
+            "recheck_risk|symbol=%s|intended_lot=%.2f|recalculated_lot=%.2f"
+            "|deviation=%.1f%%|balance=%.2f|risk_pct=%.5f"
+            "|tick_value_raw=%.6f|tick_value_scaled=%.6f|tick_size=%.6f"
+            "|point=%.6f|sl_distance=%.6f|raw_lot=%.4f",
+            intent.symbol,
+            intended_lot,
+            recalculated_lot,
+            deviation,
+            current_balance,
+            risk_pct,
+            tick_value_from_profile,
+            tick_value,
+            tick_size_profile,
+            point,
+            sl_distance,
+            raw_lot,
+        )
+
         if deviation > max_lot_deviation_pct:
             return RecheckVerdict(
                 passed=False,

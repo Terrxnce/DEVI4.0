@@ -199,7 +199,7 @@
     "cache_ttl_hours": 12.0
   },
   "ftmo": {
-    "initial_balance": 100000.0,
+    "initial_balance": 10000.0,
     "max_daily_loss_pct": 0.05,
     "max_total_loss_pct": 0.1,
     "daily_buffer_pct": 0.005,
@@ -215,7 +215,7 @@
   },
   "supabase": {
     "enabled": true,
-    "account_id": "ftmo_challenge_1"
+    "account_id": "ftmo_challenge_2"
   },
   "symbol_sessions": {
     "default": [
@@ -349,10 +349,7 @@
       "NY_AM",
       "NY_PM"
     ],
-    "JP225.cash": [
-      "ASIA",
-      "NY_AM"
-    ]
+    "_JP225.cash_removed": "spread always 10x cap, never executable"
   },
   "trading_window": {
     "enabled": true,
