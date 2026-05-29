@@ -464,6 +464,49 @@ class LiveSession:
                     _still_open.append(_pos)
             open_positions = _still_open
 
+            # Re-sync the position tracker immediately so it detects the
+            # session_close_exit closures in this cycle rather than the next.
+            # Without this, the tracker has no prev_positions in the next cycle
+            # to diff against, so trade_close records are never written.
+            if _session_closes_sent:
+                self.position_tracker.sync_positions()
+                for _closed_pos in self.position_tracker.get_newly_closed():
+                    _close_ts = datetime.now(tz=UTC).isoformat()
+                    self.writer.write_position_event({
+                        "event": "position_close",
+                        "ticket": _closed_pos.ticket,
+                        "symbol": _closed_pos.symbol,
+                        "side": _closed_pos.side,
+                        "lot_size": _closed_pos.lot_size,
+                        "open_price": _closed_pos.open_price,
+                        "close_price": _closed_pos.close_price,
+                        "close_time": _closed_pos.close_time,
+                        "close_reason": _closed_pos.close_reason,
+                        "close_pnl": _closed_pos.close_pnl,
+                        "trade_id": _closed_pos.trade_id,
+                        "decision_id": _closed_pos.decision_id,
+                        "run_id": run_id,
+                        "timestamp": _close_ts,
+                    })
+                    if _closed_pos.trade_id:
+                        self.writer.write_trade_close({
+                            "event": "trade_close",
+                            "trade_id": _closed_pos.trade_id,
+                            "decision_id": _closed_pos.decision_id,
+                            "ticket": _closed_pos.ticket,
+                            "symbol": _closed_pos.symbol,
+                            "side": _closed_pos.side,
+                            "lot_size": _closed_pos.lot_size,
+                            "open_price": _closed_pos.open_price,
+                            "close_price": _closed_pos.close_price,
+                            "close_time": _closed_pos.close_time,
+                            "close_reason": _closed_pos.close_reason,
+                            "close_pnl": _closed_pos.close_pnl,
+                            "status": "closed",
+                            "run_id": run_id,
+                            "timestamp": _close_ts,
+                        })
+
         # Re-fetch account after session closes so the FTMO snapshot and daily
         # summary reflect the settled post-close balance, not the pre-close value
         # captured at cycle start. Only re-fetches when closes were actually sent
