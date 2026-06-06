@@ -1,7 +1,8 @@
 {
-  "_description": "Live profile: trade all Market Watch symbols, all setups, dynamic lot sizing capped by risk_per_trade_pct.",
-  "broker_label": "ftmo",
-  "broker_utc_offset_hours": 3,
+  "_description": "Blueberry Funded 10k — standard 2-step challenge. All FX pairs + indices using Blueberry broker symbol names.",
+  "broker_label": "blueberry",
+  "broker_utc_offset_hours": 2,
+  "_broker_utc_note": "Verify this: open MT5, check server time in bottom-right corner. If it shows 2h ahead of UTC set to 2, if 3h ahead set to 3.",
   "pipeline": {
     "enable_full_phase1_flow": true
   },
@@ -49,11 +50,7 @@
     }
   },
   "trend": {
-    "ema_periods": [
-      21,
-      50,
-      200
-    ],
+    "ema_periods": [21, 50, 200],
     "slope_lookback": 5,
     "adx_period": 14,
     "adx_trend_threshold": 20.0
@@ -174,6 +171,13 @@
   "instrument": {
     "_note": "Placeholder. LiveSession injects per-symbol MT5 profile into the risk config at runtime."
   },
+  "ftmo": {
+    "initial_balance": 10000.0,
+    "max_daily_loss_pct": 0.05,
+    "max_total_loss_pct": 0.10,
+    "daily_buffer_pct": 0.005,
+    "total_buffer_pct": 0.005
+  },
   "sessions": {
     "ASIA": {
       "start": "00:00",
@@ -199,13 +203,6 @@
     "block_on_fetch_failure": true,
     "cache_ttl_hours": 12.0
   },
-  "ftmo": {
-    "initial_balance": 10000.0,
-    "max_daily_loss_pct": 0.05,
-    "max_total_loss_pct": 0.1,
-    "daily_buffer_pct": 0.005,
-    "total_buffer_pct": 0.005
-  },
   "telemetry": {
     "enabled": true,
     "write_decisions": true,
@@ -216,159 +213,56 @@
   },
   "supabase": {
     "enabled": true,
-    "account_id": "ftmo_challenge_2"
-  },
-  "symbol_sessions": {
-    "default": [
-      "ASIA",
-      "LONDON",
-      "NY_AM",
-      "NY_PM"
-    ],
-    "AUDJPY": [
-      "ASIA"
-    ],
-    "AUDUSD": [
-      "ASIA",
-      "NY_AM"
-    ],
-    "NZDJPY": [
-      "ASIA"
-    ],
-    "USDJPY": [
-      "ASIA",
-      "NY_AM"
-    ],
-    "AUDNZD": [
-      "ASIA"
-    ],
-    "NZDUSD": [
-      "ASIA",
-      "LONDON"
-    ],
-    "AUDCAD": [
-      "ASIA"
-    ],
-    "AUDCHF": [
-      "ASIA",
-      "LONDON"
-    ],
-    "NZDCAD": [
-      "ASIA",
-      "LONDON"
-    ],
-    "NZDCHF": [
-      "ASIA",
-      "LONDON"
-    ],
-    "CADJPY": [
-      "ASIA"
-    ],
-    "CHFJPY": [
-      "LONDON"
-    ],
-    "EURUSD": [
-      "LONDON",
-      "NY_AM",
-      "NY_PM"
-    ],
-    "GBPUSD": [
-      "LONDON",
-      "NY_AM",
-      "NY_PM"
-    ],
-    "EURJPY": [
-      "LONDON",
-      "NY_AM"
-    ],
-    "GBPJPY": [
-      "LONDON"
-    ],
-    "EURGBP": [
-      "LONDON",
-      "NY_AM"
-    ],
-    "EURCAD": [
-      "LONDON",
-      "NY_AM"
-    ],
-    "EURCHF": [
-      "LONDON",
-      "NY_AM"
-    ],
-    "EURAUD": [
-      "LONDON",
-      "NY_AM"
-    ],
-    "EURNZD": [
-      "LONDON",
-      "NY_AM"
-    ],
-    "GBPCAD": [
-      "LONDON",
-      "NY_AM"
-    ],
-    "GBPCHF": [
-      "LONDON",
-      "NY_AM"
-    ],
-    "GBPAUD": [
-      "LONDON",
-      "NY_AM"
-    ],
-    "GBPNZD": [
-      "LONDON",
-      "NY_AM"
-    ],
-    "USDCAD": [
-      "LONDON",
-      "NY_AM",
-      "NY_PM"
-    ],
-    "USDCHF": [
-      "LONDON",
-      "NY_AM",
-      "NY_PM"
-    ],
-    "XAUUSD": [
-      "LONDON",
-      "NY_AM"
-    ],
-    "XAGUSD": [
-      "LONDON",
-      "NY_AM"
-    ],
-    "US30.cash": [
-      "NY_AM",
-      "NY_PM"
-    ],
-    "US100.cash": [
-      "NY_AM",
-      "NY_PM"
-    ],
-    "US500.cash": [
-      "NY_AM",
-      "NY_PM"
-    ],
-    "_JP225.cash_removed": "spread always 10x cap, never executable"
-  },
-  "trading_window": {
-    "enabled": true,
-    "timezone": "UTC",
-    "days": [
-      "MON",
-      "TUE",
-      "WED",
-      "THU",
-      "FRI"
-    ],
-    "start_utc": "00:00",
-    "end_utc": "19:00"
+    "account_id": "blueberry_10k"
   },
   "narrative": {
     "narrative_mode": true,
     "h4_context_gate": false,
     "min_fvg_quality": 0.35,
     "retrace_tolerance_atr": 0.15
+  },
+  "symbol_sessions": {
+    "default": ["ASIA", "LONDON", "NY_AM", "NY_PM"],
+    "AUDJPY.pi":  ["ASIA"],
+    "AUDUSD.pi":  ["ASIA", "NY_AM"],
+    "NZDJPY.pi":  ["ASIA"],
+    "USDJPY.pi":  ["ASIA", "NY_AM"],
+    "AUDNZD.pi":  ["ASIA"],
+    "NZDUSD.pi":  ["ASIA", "LONDON"],
+    "AUDCAD.pi":  ["ASIA"],
+    "AUDCHF.pi":  ["ASIA", "LONDON"],
+    "NZDCAD.pi":  ["ASIA", "LONDON"],
+    "NZDCHF.pi":  ["ASIA", "LONDON"],
+    "CADJPY.pi":  ["ASIA"],
+    "CHFJPY.pi":  ["LONDON"],
+    "EURUSD.pi":  ["LONDON", "NY_AM", "NY_PM"],
+    "GBPUSD.pi":  ["LONDON", "NY_AM", "NY_PM"],
+    "EURJPY.pi":  ["LONDON", "NY_AM"],
+    "GBPJPY.pi":  ["LONDON"],
+    "EURGBP.pi":  ["LONDON", "NY_AM"],
+    "EURCAD.pi":  ["LONDON", "NY_AM"],
+    "EURCHF.pi":  ["LONDON", "NY_AM"],
+    "EURAUD.pi":  ["LONDON", "NY_AM"],
+    "EURNZD.pi":  ["LONDON", "NY_AM"],
+    "GBPCAD.pi":  ["LONDON", "NY_AM"],
+    "GBPCHF.pi":  ["LONDON", "NY_AM"],
+    "GBPAUD.pi":  ["LONDON", "NY_AM"],
+    "GBPNZD.pi":  ["LONDON", "NY_AM"],
+    "USDCAD.pi":  ["LONDON", "NY_AM", "NY_PM"],
+    "USDCHF.pi":  ["LONDON", "NY_AM", "NY_PM"],
+    "XAUUSD.pi":  ["LONDON", "NY_AM"],
+    "XAGUSD.pi":  ["LONDON", "NY_AM"],
+    "NAS100.p":   ["NY_AM", "NY_PM"],
+    "DJ30.p":     ["NY_AM", "NY_PM"],
+    "SP500.p":    ["NY_AM", "NY_PM"],
+    "GER40.p":    ["LONDON", "NY_AM"],
+    "UK100.p":    ["LONDON"]
+  },
+  "trading_window": {
+    "enabled": true,
+    "timezone": "UTC",
+    "days": ["MON", "TUE", "WED", "THU", "FRI"],
+    "start_utc": "00:00",
+    "end_utc": "19:00"
   }
 }

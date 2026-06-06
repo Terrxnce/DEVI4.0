@@ -166,6 +166,23 @@ class LiveSession:
         )
         self._zone_tracker: ZoneTracker = ZoneTracker(max_zone_age_bars=zone_age)
 
+    def _resolve_broker_symbol(self, symbol: str) -> str:
+        """Translate a canonical symbol name to the broker's MT5 symbol name.
+
+        The config may define a ``symbol_map`` block for brokers that use
+        non-standard names (e.g. Blueberry uses DJ30 for the Dow Jones,
+        GER30 for the DAX). If no mapping is defined the symbol is returned
+        unchanged.
+
+        Example config::
+
+            "symbol_map": {
+                "US30.cash": "DJ30",
+                "GER40.cash": "GER30"
+            }
+        """
+        return self.config.get("symbol_map", {}).get(symbol, symbol)
+
     def close(self) -> None:
         self.data.close()
 
@@ -376,7 +393,8 @@ class LiveSession:
                 self.config.setdefault("ftmo", {})["initial_balance"] = _live_balance
 
         if _live_login and self._supabase is not None:
-            _auto_account_id = f"ftmo_{_live_login}"
+            _broker_label = str(self.config.get("broker_label", "ftmo")).lower()
+            _auto_account_id = f"{_broker_label}_{_live_login}"
             if self._supabase._account_id != _auto_account_id:
                 logger.info(
                     "live_session: updating supabase account_id from '%s' to '%s' "
@@ -784,8 +802,11 @@ class LiveSession:
             )
 
         # 1. Fetch instrument profile and validate
+        # broker_symbol is the name MT5 knows — may differ from the canonical
+        # symbol name used internally (see symbol_map in config).
+        broker_symbol = self._resolve_broker_symbol(symbol)
         try:
-            profile = self.data.fetch_instrument_profile(symbol)
+            profile = self.data.fetch_instrument_profile(broker_symbol)
         except DataSourceError as exc:
             return SymbolResult(
                 symbol=symbol,
@@ -817,10 +838,10 @@ class LiveSession:
 
         # 2. Fetch bars and tick
         try:
-            m15_bars = self.data.fetch_bars(symbol, Timeframe.M15, count=_DEFAULT_M15_BAR_COUNT)
-            h1_bars = self.data.fetch_bars(symbol, Timeframe.H1, count=_DEFAULT_H1_BAR_COUNT)
-            h4_bars = self.data.fetch_bars(symbol, Timeframe.H4, count=_DEFAULT_H4_BAR_COUNT)
-            tick = self.data.fetch_tick(symbol)
+            m15_bars = self.data.fetch_bars(broker_symbol, Timeframe.M15, count=_DEFAULT_M15_BAR_COUNT)
+            h1_bars = self.data.fetch_bars(broker_symbol, Timeframe.H1, count=_DEFAULT_H1_BAR_COUNT)
+            h4_bars = self.data.fetch_bars(broker_symbol, Timeframe.H4, count=_DEFAULT_H4_BAR_COUNT)
+            tick = self.data.fetch_tick(broker_symbol)
         except DataSourceError as exc:
             return SymbolResult(
                 symbol=symbol,

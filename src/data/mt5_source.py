@@ -166,11 +166,33 @@ class MT5DataSource:
         volume_min = float(getattr(info, "volume_min", 0.01))
         volume_max = float(getattr(info, "volume_max", 100.0))
 
-        instrument_class = InstrumentClass.FX
-        if symbol == "XAUUSD":
+        # Classify instrument by stripping broker-specific suffixes (.cash, .futures etc.)
+        # then matching against known metal and index base names.
+        _METAL_BASES = frozenset({"XAUUSD", "XAGUSD", "XPTUSD", "XPDUSD"})
+        _INDEX_BASES = frozenset({
+            # US indices — generic and broker-specific variants
+            "US30", "US100", "US500", "US2000",
+            "DJ30", "DJI30",                        # Dow (Blueberry, others)
+            "NAS100", "NDX100", "TECH100",          # Nasdaq variants
+            "SP500", "SPX500",                      # S&P variants
+            # European indices
+            "GER30", "GER40", "DE30", "DE40",       # DAX variants
+            "UK100", "FTSE100",                     # FTSE
+            "FRA40", "CAC40",                       # CAC
+            "EU50", "EURO50",                       # Euro Stoxx
+            # Asia-Pacific
+            "AUS200", "AU200", "ASX200",
+            "JPN225", "JP225", "NKY225",
+            "HK50", "HKG50",
+            "CHN50", "CHINA50",
+        })
+        _symbol_base = symbol.upper().split(".")[0]
+        if _symbol_base in _METAL_BASES:
             instrument_class = InstrumentClass.XAUUSD
-        elif symbol.startswith("US"):
+        elif _symbol_base in _INDEX_BASES:
             instrument_class = InstrumentClass.INDICES
+        else:
+            instrument_class = InstrumentClass.FX
 
         return InstrumentProfile(
             symbol=symbol,

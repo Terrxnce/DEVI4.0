@@ -120,6 +120,59 @@ def _load_config(path: str) -> dict:
         return json.load(f)
 
 
+def _auto_detect_config() -> str:
+    """Detect the connected broker from MT5 account_info and return the matching config path.
+
+    Reads broker company name from the live MT5 account, matches it against
+    src/config/broker_profiles.json, and returns the config path for that broker.
+    Exits with a clear message if detection fails or no profile matches.
+    """
+    try:
+        import MetaTrader5 as mt5  # type: ignore
+        if not mt5.initialize():
+            print("[auto-detect] MT5 initialize failed. Is MT5 open and logged in?")
+            sys.exit(1)
+        try:
+            info = mt5.account_info()
+        finally:
+            mt5.shutdown()
+        if info is None:
+            print("[auto-detect] MT5 account_info returned None. Is an account logged in?")
+            sys.exit(1)
+        company = str(getattr(info, "company", "")).strip()
+        login = int(getattr(info, "login", 0))
+        balance = float(getattr(info, "balance", 0.0))
+    except Exception as exc:
+        print(f"[auto-detect] MT5 detection failed: {exc}")
+        print("[auto-detect] Use --config to specify a config file manually.")
+        sys.exit(1)
+
+    profiles_path = Path(__file__).parent.parent / "src" / "config" / "broker_profiles.json"
+    if not profiles_path.exists():
+        print(f"[auto-detect] broker_profiles.json not found at {profiles_path}")
+        print("[auto-detect] Use --config to specify a config file manually.")
+        sys.exit(1)
+
+    with open(profiles_path, "r", encoding="utf-8") as f:
+        profiles_data = json.load(f)
+
+    company_lower = company.lower()
+    for profile in profiles_data.get("profiles", []):
+        pattern = str(profile.get("broker_pattern", "")).lower()
+        if pattern and pattern in company_lower:
+            config_path = profile["config"]
+            label = profile.get("label", config_path)
+            print(f"[auto-detect] Broker  : {company} (login {login}, balance {balance:.2f})")
+            print(f"[auto-detect] Profile : {label}")
+            print(f"[auto-detect] Config  : {config_path}")
+            return config_path
+
+    print(f"[auto-detect] No profile matched for broker: {company!r}")
+    print("[auto-detect] Add an entry to src/config/broker_profiles.json")
+    print("[auto-detect] or use --config to specify a config file manually.")
+    sys.exit(1)
+
+
 def _summarise_tp_debug(tp_debug: dict | None) -> dict | None:
     """Return a compact summary of tp_debug for the scan loop log line."""
     if not isinstance(tp_debug, dict):
@@ -318,13 +371,20 @@ def _print_symbol_breakdown(result: dict, *, max_groups: int = 6, per_group: int
 
 def main() -> int:
     parser = argparse.ArgumentParser(prog="live_scan_loop")
-    parser.add_argument("--config", required=True)
+    parser.add_argument(
+        "--config",
+        default=None,
+        help="Path to config JSON. If omitted, broker is auto-detected from MT5 account_info.",
+    )
     parser.add_argument("--symbol", action="append", default=None)
     parser.add_argument("--max-orders", type=int, default=1)
     parser.add_argument("--max-cycles", type=int, default=None)
     parser.add_argument("--reason", default="live scan loop")
     parser.add_argument("--log-file", default="logs/live_scan_loop.log")
     args = parser.parse_args()
+
+    if args.config is None:
+        args.config = _auto_detect_config()
 
     cfg = _load_config(args.config)
     sessions_cfg = cfg.get("sessions", {}) if isinstance(cfg, dict) else {}

@@ -1,0 +1,15 @@
+{
+  "_description": "Maps MT5 broker company name substrings to DEVI config files. Matching is case-insensitive substring. First match wins.",
+  "profiles": [
+    {
+      "broker_pattern": "blueberry",
+      "config": "src/config/blueberry_10k.json",
+      "label": "Blueberry Funded 10k"
+    },
+    {
+      "broker_pattern": "ftmo",
+      "config": "src/config/live_market_watch.json",
+      "label": "FTMO Challenge"
+    }
+  ]
+}
