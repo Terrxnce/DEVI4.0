@@ -1,8 +1,7 @@
 {
   "_description": "Blueberry Funded 10k — standard 2-step challenge. All FX pairs + indices using Blueberry broker symbol names.",
   "broker_label": "blueberry",
-  "broker_utc_offset_hours": 2,
-  "_broker_utc_note": "Verify this: open MT5, check server time in bottom-right corner. If it shows 2h ahead of UTC set to 2, if 3h ahead set to 3.",
+  "broker_utc_offset_hours": 3,
   "pipeline": {
     "enable_full_phase1_flow": true
   },
