@@ -16,6 +16,12 @@ from __future__ import annotations
 import argparse
 import json
 import os
+
+try:
+    from dotenv import load_dotenv as _load_dotenv
+    _load_dotenv()
+except ImportError:
+    pass  # dotenv not installed — env vars must be set in the shell
 import subprocess
 import sys
 import time
