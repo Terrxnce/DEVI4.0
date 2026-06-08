@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import time
@@ -196,7 +197,7 @@ def _parse_hhmm(value: str) -> tuple[int, int]:
 
 def _is_in_any_session(now: datetime, sessions_cfg: dict) -> bool:
     t = now.time()
-    for key in ("ASIA", "LONDON", "NY_AM", "NY_PM"):
+    for key in sessions_cfg.keys():
         spec = sessions_cfg.get(key)
         if not isinstance(spec, dict):
             continue
@@ -212,8 +213,7 @@ def _is_in_any_session(now: datetime, sessions_cfg: dict) -> bool:
 def _seconds_until_next_session(now: datetime, sessions_cfg: dict) -> float:
     """Return seconds until the next session start (UTC)."""
     candidates: list[datetime] = []
-    for key in ("ASIA", "LONDON", "NY_AM", "NY_PM"):
-        spec = sessions_cfg.get(key)
+    for key, spec in sessions_cfg.items():
         if not isinstance(spec, dict):
             continue
         sh, sm = _parse_hhmm(spec.get("start", "00:00"))
@@ -229,9 +229,9 @@ def _seconds_until_next_session(now: datetime, sessions_cfg: dict) -> float:
         next_start = min(future)
         return (next_start - now).total_seconds()
 
-    asia = sessions_cfg.get("ASIA", {"start": "00:00"})
-    sh, sm = _parse_hhmm(asia.get("start", "00:00"))
-    next_start = (now.replace(hour=sh, minute=sm, second=0, microsecond=0) + timedelta(days=1))
+    # Roll the earliest session of the day to tomorrow
+    earliest_start = min(candidates)
+    next_start = earliest_start + timedelta(days=1)
     return (next_start - now).total_seconds()
 
 
