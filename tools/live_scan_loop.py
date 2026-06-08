@@ -512,7 +512,10 @@ def main() -> int:
         if daily_acc["cycles"] > 0:
             daily_acc["date"] = datetime.now(tz=UTC).strftime("%Y-%m-%d")
             _close_day(daily_acc)
-        _DISCORD._post("🔴 **D.E.V.I is offline**\nScanning stopped.")
+        try:
+            _DISCORD._post("🔴 **D.E.V.I is offline**\nScanning stopped.")
+        except Exception:
+            pass
         return 0
 
     if args.max_cycles is not None:

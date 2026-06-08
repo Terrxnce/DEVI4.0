@@ -924,7 +924,7 @@ class LiveSession:
             effective_max_lot = broker_max_lot
 
         symbol_cfg["instrument"] = {
-            "symbol": symbol,
+            "symbol": broker_symbol,
             "digits": profile["digits"] if isinstance(profile, dict) else profile.digits,
             "point": profile["point"] if isinstance(profile, dict) else profile.point,
             "tick_size": profile["tick_size"] if isinstance(profile, dict) else profile.tick_size,
@@ -998,6 +998,15 @@ class LiveSession:
         live_fill: dict[str, Any] | None = None
         if outcome.final_decision == FinalDecision.EXECUTE and outcome.trade_intent is not None:
             intent = outcome.trade_intent
+
+            # TradeIntent.symbol is derived from context.symbol (canonical name, e.g.
+            # "EURAUD"). Pre-trade rechecks call fetch_tick/fetch_symbol_info using
+            # intent.symbol, so the broker name must be used there — not the canonical.
+            # Replace symbol only when a broker-specific translation exists (e.g. Blueberry
+            # appends ".pi"; FTMO needs no translation so broker_symbol == symbol).
+            if broker_symbol != symbol:
+                from dataclasses import replace as _dc_replace
+                intent = _dc_replace(intent, symbol=broker_symbol)
 
             # Compute absolute spread cap from config spread_max_pips and symbol point.
             # 1 pip = 10 points for standard FX (e.g. EURUSD point=0.00001, pip=0.0001).
@@ -1089,7 +1098,7 @@ class LiveSession:
                 pt = outcome.confluence.primary_trigger
                 if pt.structure_type == StructureType.ORDER_BLOCK:
                     self._record_used_ob_zone(
-                        symbol=intent.symbol,
+                        symbol=symbol,
                         direction=intent.direction.value,
                         price_low=pt.price_low,
                         price_high=pt.price_high,
@@ -1104,7 +1113,7 @@ class LiveSession:
                 for s in all_confluence_structures:
                     if s is not None and s.structure_type == StructureType.BREAK_OF_STRUCTURE:
                         self._zone_tracker.mark_bos_consumed(
-                            symbol=intent.symbol,
+                            symbol=symbol,
                             bar_index=s.bar_index,
                             timeframe=s.timeframe,
                             current_bar_index=current_bar.bar_index,
@@ -1116,7 +1125,7 @@ class LiveSession:
                     ticket=order_result.ticket,
                     trade_id=intent.trade_id,
                     decision_id=decision_id,
-                    symbol=intent.symbol,
+                    symbol=symbol,
                     side=intent.direction.value,
                     lot_size=intent.risk_verdict.lot_size,
                     open_price=live_fill["actual_fill"],

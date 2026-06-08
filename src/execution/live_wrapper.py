@@ -152,9 +152,10 @@ class LiveOrderWrapper:
                 f"Pre-trade recheck failed: {recheck_verdict.reason}",
             )
 
-        # All gates passed — execution attempt consumes arming token.
+        # All gates passed. Token stays valid for the rest of this cycle so
+        # multiple symbols can execute up to max_orders_per_run. The token is
+        # cleared at cycle end by cmd_live_scan's unconditional disarm call.
         result = self._execute(intent, token, kill_switch)
-        arming_service.consume_token(str(token.token_id), reason="execution_attempt")
         return result
 
     def _execute(
