@@ -1,0 +1,5 @@
+MetaTrader5       # Windows only — live broker connection
+requests          # Discord notifier, Ollama narrator
+supabase          # Remote telemetry (optional, gated by config)
+python-dotenv     # Load .env file into environment
+pytest            # Test suite
