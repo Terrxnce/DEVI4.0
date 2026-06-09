@@ -896,7 +896,9 @@ class LiveSession:
         tp_structures = [*tp_m15_structures, *tp_h1_structures]
 
         # 3c. Build session levels for narrative layer
-        _session_tracker = SessionLevelTracker()
+        _narrative_cfg = symbol_cfg.get("narrative", {})
+        _sweep_lookback = int(_narrative_cfg.get("sweep_lookback_bars", 20))
+        _session_tracker = SessionLevelTracker(sweep_lookback_bars=_sweep_lookback)
         session_levels = _session_tracker.compute(m15_bars, self.config.get("sessions", {}))
 
         # 4. Build context
@@ -1026,7 +1028,7 @@ class LiveSession:
                 kill_switch_enabled=bool(self.config.get("execution", {}).get("kill_switch_enabled", False)),
                 risk_dynamic_lot_sizing=bool(self.config.get("risk", {}).get("dynamic_lot_sizing", True)),
                 risk_fixed_lot_size=float(self.config.get("risk", {}).get("fixed_lot_size", intent.risk_verdict.lot_size)),
-                risk_per_trade_pct=float(self.config.get("risk", {}).get("risk_per_trade_pct", 0.01)) / 100.0,
+                risk_per_trade_pct=float(intent.risk_verdict.actual_risk_pct) / 100.0,
                 spread_max_price=spread_max_price,
             )
 

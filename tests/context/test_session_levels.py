@@ -293,3 +293,148 @@ def test_sweep_uses_most_recent_prior_session():
     assert result.sweep.direction == Direction.BEARISH
     assert result.sweep.swept_level == pytest.approx(1.1080)
     assert result.sweep.swept_session == Session.LONDON
+
+
+# ---------------------------------------------------------------------------
+# Sweep lookback — sweep persists across subsequent bars
+# ---------------------------------------------------------------------------
+
+
+def test_sweep_persists_within_lookback_window():
+    """Sweep on bar N is still detected on bar N+5 (within lookback=20).
+
+    This is the core fix: SWEEP_REVERSAL entries fire on the retrace bar,
+    not the sweep bar itself. The sweep must remain visible for 3-15+ bars
+    while displacement and retrace develop.
+    """
+    tracker = SessionLevelTracker(sweep_lookback_bars=20)
+
+    # Asia: low at 1.0950 (bars 0-1)
+    asia_bars = [
+        _bar(0, 1, 0, 1.1000, 1.1030, 1.0970, 1.1010),
+        _bar(1, 2, 0, 1.1010, 1.1040, 1.0950, 1.1015),
+    ]
+    gap = _bar(2, 6, 30, 1.1015, 1.1020, 1.1010, 1.1015)
+
+    # Bar 3: London sweep bar — wick below 1.0950, closes back above
+    sweep_bar = _bar(3, 8, 0, 1.1015, 1.1020, 1.0940, 1.0960)
+
+    # Bars 4-8: subsequent London bars (displacement + retrace developing)
+    post_sweep = [
+        _bar(4, 8, 15, 1.0960, 1.0980, 1.0955, 1.0975),
+        _bar(5, 8, 30, 1.0975, 1.1000, 1.0970, 1.0995),
+        _bar(6, 8, 45, 1.0995, 1.1005, 1.0980, 1.0990),
+        _bar(7, 9,  0, 1.0990, 1.0998, 1.0965, 1.0970),
+        _bar(8, 9, 15, 1.0970, 1.0985, 1.0958, 1.0972),
+    ]
+
+    bars = asia_bars + [gap, sweep_bar] + post_sweep
+    result = tracker.compute(bars, SESSIONS_CFG)
+
+    # Sweep at bar 3 is 5 bars ago — still within lookback=20
+    assert result.sweep is not None
+    assert result.sweep.direction == Direction.BULLISH
+    assert result.sweep.bar_index == 3
+    assert result.sweep.swept_level == pytest.approx(1.0950)
+
+
+def test_sweep_expires_beyond_lookback_window():
+    """Sweep on bar N is dropped when current bar is N + lookback + 1."""
+    tracker = SessionLevelTracker(sweep_lookback_bars=5)
+
+    asia_bars = [
+        _bar(0, 1, 0, 1.1000, 1.1030, 1.0970, 1.1010),
+        _bar(1, 2, 0, 1.1010, 1.1040, 1.0950, 1.1015),
+    ]
+    gap = _bar(2, 6, 30, 1.1015, 1.1020, 1.1010, 1.1015)
+
+    # Bar 3: sweep
+    sweep_bar = _bar(3, 8, 0, 1.1015, 1.1020, 1.0940, 1.0960)
+
+    # Bars 4-9: 6 more bars (3 + 6 = 9, gap from sweep = 6 > lookback=5)
+    post_sweep = [
+        _bar(4, 8, 15, 1.0960, 1.0980, 1.0955, 1.0975),
+        _bar(5, 8, 30, 1.0975, 1.1000, 1.0970, 1.0995),
+        _bar(6, 8, 45, 1.0995, 1.1005, 1.0980, 1.0990),
+        _bar(7, 9,  0, 1.0990, 1.0998, 1.0965, 1.0970),
+        _bar(8, 9, 15, 1.0970, 1.0985, 1.0958, 1.0972),
+        _bar(9, 9, 30, 1.0972, 1.0990, 1.0960, 1.0980),
+    ]
+
+    bars = asia_bars + [gap, sweep_bar] + post_sweep
+    result = tracker.compute(bars, SESSIONS_CFG)
+
+    # Sweep at bar 3, current bar 9: gap = 6 > lookback=5 → expired
+    assert result.sweep is None
+
+
+def test_most_recent_sweep_wins_when_two_sweeps_in_window():
+    """When two sweeps occur within the lookback window, the most recent is returned."""
+    tracker = SessionLevelTracker(sweep_lookback_bars=20)
+
+    asia_bars = [
+        _bar(0, 1, 0, 1.1000, 1.1050, 1.0950, 1.1010),
+    ]
+    gap = _bar(1, 6, 30, 1.1010, 1.1015, 1.1005, 1.1010)
+
+    # Bar 2: first sweep (bullish — wick below Asia low 1.0950)
+    first_sweep = _bar(2, 8, 0, 1.1010, 1.1020, 1.0940, 1.0960)
+
+    # Bars 3-4: normal London bars
+    mid_bars = [
+        _bar(3, 8, 15, 1.0960, 1.0980, 1.0955, 1.0975),
+        _bar(4, 8, 30, 1.0975, 1.1000, 1.0970, 1.0990),
+    ]
+
+    # Bar 5: second sweep (bearish — wick above Asia high 1.1050)
+    second_sweep = _bar(5, 8, 45, 1.0990, 1.1060, 1.0985, 1.1020)
+
+    bars = asia_bars + [gap, first_sweep] + mid_bars + [second_sweep]
+    result = tracker.compute(bars, SESSIONS_CFG)
+
+    # Most recent sweep is the bearish one at bar 5
+    assert result.sweep is not None
+    assert result.sweep.direction == Direction.BEARISH
+    assert result.sweep.bar_index == 5
+
+
+def test_sweep_detected_from_london_persists_into_ny_am():
+    """Sweep detected during LONDON session is still active during NY_AM retrace.
+
+    This covers the real-world cross-session persistence case: Asia sweep
+    happens mid-London, retrace entry fires early NY_AM.
+    """
+    tracker = SessionLevelTracker(sweep_lookback_bars=20)
+
+    # Asia: low at 1.0950
+    asia_bars = [
+        _bar(0, 1, 0, 1.1000, 1.1030, 1.0970, 1.1010),
+        _bar(1, 2, 0, 1.1010, 1.1040, 1.0950, 1.1015),
+    ]
+    gap_bar = _bar(2, 6, 30, 1.1015, 1.1020, 1.1010, 1.1015)
+
+    # Bar 3 (08:00 London): sweep of Asia low
+    london_sweep = _bar(3, 8, 0, 1.1015, 1.1025, 1.0940, 1.0960)
+
+    # Bars 4-7: rest of London (displacement, BOS)
+    london_rest = [
+        _bar(4, 8, 15, 1.0960, 1.0985, 1.0955, 1.0980),
+        _bar(5, 8, 30, 1.0980, 1.1010, 1.0975, 1.1005),
+        _bar(6, 9,  0, 1.1005, 1.1020, 1.0990, 1.1000),
+        _bar(7, 10, 0, 1.1000, 1.1015, 1.0970, 1.0975),
+    ]
+
+    # Gap between London and NY_AM (11:30-13:00 in old config; using 12:00 here)
+    ny_gap = _bar(8, 12, 0, 1.0975, 1.0980, 1.0968, 1.0972)
+
+    # Bar 9 (13:00 NY_AM): price retraces into FVG zone — this is where entry fires
+    ny_retrace = _bar(9, 13, 0, 1.0972, 1.0978, 1.0960, 1.0968)
+
+    bars = asia_bars + [gap_bar, london_sweep] + london_rest + [ny_gap, ny_retrace]
+    result = tracker.compute(bars, SESSIONS_CFG)
+
+    # Sweep at bar 3, current bar 9: gap = 6 < lookback=20 → still active
+    assert result.sweep is not None
+    assert result.sweep.direction == Direction.BULLISH
+    assert result.sweep.bar_index == 3
+    assert result.sweep.swept_session == Session.ASIA

@@ -184,7 +184,7 @@
     },
     "LONDON": {
       "start": "07:00",
-      "end": "11:30"
+      "end": "16:00"
     },
     "NY_AM": {
       "start": "13:00",
@@ -218,7 +218,8 @@
     "narrative_mode": true,
     "h4_context_gate": false,
     "min_fvg_quality": 0.35,
-    "retrace_tolerance_atr": 0.15
+    "retrace_tolerance_atr": 0.15,
+    "sweep_lookback_bars": 20
   },
   "symbol_sessions": {
     "default": ["ASIA", "LONDON", "NY_AM", "NY_PM"],

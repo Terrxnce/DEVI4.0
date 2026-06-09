@@ -24,7 +24,7 @@ class SessionRange:
 
 @dataclass(frozen=True)
 class SessionSweep:
-    """A sweep of a prior-session extreme detected on the current bar.
+    """A sweep of a prior-session extreme detected within the lookback window.
 
     direction=BULLISH  → price spiked below the prior session low and closed back above it
                           (setup context: bullish reversal from sweep of lows)
@@ -47,7 +47,7 @@ class SessionLevels:
     current_session_high: float
     current_session_low: float
     prior_completed_sessions: list[SessionRange]  # most-recent first
-    sweep: SessionSweep | None  # populated when current bar sweeps a prior-session extreme
+    sweep: SessionSweep | None  # most recent sweep within lookback window, or None
 
 
 @dataclass(frozen=True)
@@ -58,10 +58,20 @@ class SessionLevelTracker:
     ----------
     lookback_sessions:
         How many completed sessions to retain (default 3).
-        The sweep check always uses the most-recent completed session.
+    sweep_lookback_bars:
+        How many bars back to search for a qualifying sweep (default 20).
+        On M15 bars, 20 bars = 5 hours — covers the full sweep → displacement →
+        retrace sequence before the signal expires.
+
+        Background: a SWEEP_REVERSAL entry fires on the retrace into the post-sweep
+        FVG, which typically happens 3–15 bars after the sweep itself. Checking only
+        the current bar (the original behaviour) means the sweep is gone from
+        session_levels.sweep by the time price retraces, producing zero candidates.
+        A configurable lookback window keeps the sweep alive across that gap.
     """
 
     lookback_sessions: int = 3
+    sweep_lookback_bars: int = 20
 
     def compute(
         self,
@@ -77,7 +87,8 @@ class SessionLevelTracker:
 
         Returns:
             SessionLevels populated with current session H/L, prior completed
-            sessions, and a SessionSweep if the current bar swept a prior extreme.
+            sessions, and the most recent SessionSweep within sweep_lookback_bars
+            if one exists.
         """
         if not bars_m15:
             return SessionLevels(
@@ -94,6 +105,11 @@ class SessionLevelTracker:
         _active_low: float = float("inf")
         _active_start_idx: int = 0
         _active_start_time: datetime = bars_m15[0].time
+
+        # Most recent sweep detected within the lookback window.
+        # Updated inline as we process bars so that the prior-session reference
+        # is always correct at each bar's point in time.
+        latest_sweep: SessionSweep | None = None
 
         for bar in bars_m15:
             bar_session = classify_session(bar.time, sessions_cfg)
@@ -143,6 +159,34 @@ class SessionLevelTracker:
                 if bar.low < _active_low:
                     _active_low = bar.low
 
+            # Sweep detection — runs for every non-CLOSED bar using the most
+            # recently completed session as the reference. This is the correct
+            # reference because `completed` reflects session state at this
+            # exact point in time (not the end of the bar array), so we never
+            # compare against a session that hadn't finished yet.
+            if completed:
+                prior = completed[-1]
+
+                # Bullish sweep: wick below prior session low, close back above.
+                if bar.low < prior.low and bar.close > prior.low:
+                    latest_sweep = SessionSweep(
+                        direction=Direction.BULLISH,
+                        swept_level=prior.low,
+                        swept_session=prior.session,
+                        bar_index=bar.bar_index,
+                        bar_time=bar.time,
+                    )
+
+                # Bearish sweep: wick above prior session high, close back below.
+                elif bar.high > prior.high and bar.close < prior.high:
+                    latest_sweep = SessionSweep(
+                        direction=Direction.BEARISH,
+                        swept_level=prior.high,
+                        swept_session=prior.session,
+                        bar_index=bar.bar_index,
+                        bar_time=bar.time,
+                    )
+
         # After the loop the last active block is the current (incomplete) session.
         current_session = _active_session if _active_session is not None else Session.CLOSED
         current_high = _active_high if current_session != Session.CLOSED else 0.0
@@ -152,52 +196,18 @@ class SessionLevelTracker:
         prior_sessions = list(reversed(completed))
         prior_sessions = prior_sessions[: self.lookback_sessions]
 
-        # Sweep detection on the current bar (last bar in the list).
-        sweep = self._detect_sweep(bars_m15[-1], prior_sessions)
+        # Apply lookback cutoff: discard sweep if it happened more than
+        # sweep_lookback_bars ago relative to the most recent bar.
+        current_bar_index = bars_m15[-1].bar_index
+        if latest_sweep is not None:
+            bars_since_sweep = current_bar_index - latest_sweep.bar_index
+            if bars_since_sweep > self.sweep_lookback_bars:
+                latest_sweep = None
 
         return SessionLevels(
             current_session=current_session,
             current_session_high=current_high,
             current_session_low=current_low,
             prior_completed_sessions=prior_sessions,
-            sweep=sweep,
+            sweep=latest_sweep,
         )
-
-    @staticmethod
-    def _detect_sweep(bar: Bar, prior_sessions: list[SessionRange]) -> SessionSweep | None:
-        """Check if `bar` swept the high or low of the most-recent prior session.
-
-        A sweep is confirmed when:
-          - Bullish: bar.low < prior_session.low  AND  bar.close > prior_session.low
-                     (price dipped below the level and rejected back above it)
-          - Bearish: bar.high > prior_session.high AND bar.close < prior_session.high
-                     (price spiked above the level and rejected back below it)
-
-        Only the most-recent completed session is checked.
-        """
-        if not prior_sessions:
-            return None
-
-        prior = prior_sessions[0]
-
-        # Bullish sweep of lows (price wicked below prior session low, closed back above).
-        if bar.low < prior.low and bar.close > prior.low:
-            return SessionSweep(
-                direction=Direction.BULLISH,
-                swept_level=prior.low,
-                swept_session=prior.session,
-                bar_index=bar.bar_index,
-                bar_time=bar.time,
-            )
-
-        # Bearish sweep of highs (price wicked above prior session high, closed back below).
-        if bar.high > prior.high and bar.close < prior.high:
-            return SessionSweep(
-                direction=Direction.BEARISH,
-                swept_level=prior.high,
-                swept_session=prior.session,
-                bar_index=bar.bar_index,
-                bar_time=bar.time,
-            )
-
-        return None

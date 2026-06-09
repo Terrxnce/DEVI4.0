@@ -375,14 +375,20 @@ def test_order_send_success_retcode_10009() -> None:
     assert "devi:" in req["comment"]
 
 
-def test_token_consumed_on_execution_attempt() -> None:
+def test_token_persists_after_execution_attempt() -> None:
+    """Token is NOT consumed per-execution.
+
+    The wrapper keeps the token alive so multiple symbols can execute within
+    the same run up to max_orders_per_run. Token is cleared at cycle end by
+    the live scan loop's unconditional disarm call.
+    """
     mock = _MockMT5(retcode=10009)
     svc = _armed_service()
     wrapper = _make_wrapper(mt5_client=mock)
 
     result = _send(wrapper, _make_trade_intent(), arming_service=svc)
     assert result.sent is True
-    assert svc.is_armed is False
+    assert svc.is_armed is True
 
 
 def test_order_send_failure_retcode_10027() -> None:
