@@ -177,6 +177,40 @@ def _candidate_quality(source: str, structure_quality: float, age_bars: int, dis
     return (0.5 * structure_quality + 0.25 * recency_factor + 0.25 * distance_factor) * source_weight
 
 
+def _commission_price_distance(config: dict[str, Any]) -> float:
+    """Round-turn commission per lot expressed as an equivalent price distance.
+
+    A price move of this size on 1.0 lot equals the commission in account
+    currency:  c = commission_per_lot / (tick_value / tick_size). Returns 0.0
+    when no cost_model is configured or instrument tick data is missing, so the
+    RR gate is unchanged for un-costed configs (exact parity).
+    """
+    cost_cfg = config.get("cost_model") or {}
+    commission = float(cost_cfg.get("commission_per_lot_round_turn", 0.0) or 0.0)
+    if commission <= 0.0:
+        return 0.0
+    instrument = config.get("instrument", {}) or {}
+    tick_value = float(instrument.get("tick_value", 0.0) or 0.0)
+    tick_size = float(instrument.get("tick_size", 0.0) or 0.0)
+    if tick_value <= 0.0 or tick_size <= 0.0:
+        return 0.0
+    return commission * tick_size / tick_value
+
+
+def _net_rr(gross_rr: float, risk_distance: float, commission_price: float) -> float:
+    """RR after deducting round-turn commission from reward and adding to risk.
+
+    net_rr = (gross_rr*risk - c) / (risk + c). With c == 0 returns gross_rr
+    exactly. Commission only reduces RR, so net_rr <= gross_rr.
+    """
+    if commission_price <= 0.0:
+        return gross_rr
+    denom = risk_distance + commission_price
+    if denom <= 0.0:
+        return gross_rr
+    return (gross_rr * risk_distance - commission_price) / denom
+
+
 def _collect_tp_candidates(
     entry_price: float,
     direction: Direction,
@@ -193,6 +227,7 @@ def _collect_tp_candidates(
     exits_cfg = config["exits"]
     risk = _risk_distance(entry_price, sl_price, direction)
     min_rr = float(exits_cfg["min_rr"])
+    commission_price = _commission_price_distance(config)
     max_distance_atr = float(exits_cfg["tp_h1_search_hard_cap_atr"])
     # Use the wider TP pool if provided, else fall back to the entry structures list.
     # SL anchoring (same-direction, recent) stays on the entry structures list always.
@@ -374,7 +409,7 @@ def _collect_tp_candidates(
         if candidate.age_bars > tp_max_age:
             add_rejected(tp_debug, view, "tp_too_old", "quality_filter")
             continue
-        if candidate.rr < min_rr:
+        if _net_rr(candidate.rr, risk, commission_price) < min_rr:
             add_rejected(tp_debug, view, "rr_below_floor", "rr_filter")
             continue
         filtered.append(candidate)
@@ -462,7 +497,12 @@ def plan_exit(
     if not ok:
         raise ExitFailure(code, tp_debug)
 
-    if context.regime == Regime.NEUTRAL and plan.risk_reward < float(exits_cfg["min_rr_neutral"]):
-        raise ExitFailure("neutral_rr_below_floor", tp_debug)
+    if context.regime == Regime.NEUTRAL:
+        _neutral_risk = _risk_distance(entry_price, sl_choice.price, direction)
+        _neutral_net_rr = _net_rr(
+            plan.risk_reward, _neutral_risk, _commission_price_distance(config)
+        )
+        if _neutral_net_rr < float(exits_cfg["min_rr_neutral"]):
+            raise ExitFailure("neutral_rr_below_floor", tp_debug)
 
     return (plan, tp_debug)

@@ -162,6 +162,9 @@
     },
     "spread_max_pips": 5.0
   },
+  "cost_model": {
+    "commission_per_lot_round_turn": 7.0
+  },
   "runtime": {
     "namespace": "prod",
     "mode": "live",
