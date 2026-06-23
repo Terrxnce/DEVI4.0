@@ -50,6 +50,7 @@ _ORDER_TYPE_BUY = 0
 _ORDER_TYPE_SELL = 1
 _ORDER_FILLING_IOC = 1
 _RETCODE_DONE = 10009    # successful execution
+_DEAL_ENTRY_OUT = 1      # deal that closes (or partially closes) a position
 
 
 # ---------------------------------------------------------------------------
@@ -288,11 +289,21 @@ class TrailingManager:
 
         if retcode == _RETCODE_DONE:
             logger.info("trailing_manager: partial_close confirmed ticket=%s", pos.ticket)
+            realized_pnl, closed_volume = self._partial_realized_pnl(
+                pos.ticket, result_detail.get("deal")
+            )
             return TrailEvent(
                 ticket=pos.ticket,
                 symbol=pos.symbol,
                 event_type="partial_close_sent",
-                detail={"volume": volume, "price": pos.current_price, "retcode": retcode, **result_detail},
+                detail={
+                    "volume": volume,
+                    "closed_volume": closed_volume if closed_volume is not None else volume,
+                    "price": pos.current_price,
+                    "retcode": retcode,
+                    "realized_pnl": realized_pnl,
+                    **result_detail,
+                },
             )
         else:
             logger.warning(
@@ -445,5 +456,44 @@ class TrailingManager:
             "comment": getattr(result, "comment", None),
             "order": getattr(result, "order", None),
             "request_id": getattr(result, "request_id", None),
+            "deal": getattr(result, "deal", None),
         }
         return retcode, detail
+
+    def _partial_realized_pnl(
+        self, ticket: int, deal_id: int | None
+    ) -> tuple[float | None, float | None]:
+        """Return (realized_pnl, closed_volume) for a partial-close OUT deal.
+
+        Queries MT5 deal history for the position and reads the broker-booked
+        profit of the partial leg. Prefers the deal matching the order_send
+        result `deal` id; falls back to the most recent OUT deal. Returns
+        (None, None) when history is unavailable so the caller can still emit
+        the event without blocking breakeven/trail.
+        """
+        if self._mt5 is None:
+            return None, None
+        if not callable(getattr(self._mt5, "history_deals_get", None)):
+            return None, None
+        try:
+            deals = self._mt5.history_deals_get(position=ticket)
+        except Exception:
+            return None, None
+        if not deals:
+            return None, None
+        out_deals = [d for d in deals if int(getattr(d, "entry", -1)) == _DEAL_ENTRY_OUT]
+        if not out_deals:
+            return None, None
+        chosen = None
+        if deal_id is not None:
+            for d in out_deals:
+                if int(getattr(d, "ticket", -1)) == int(deal_id):
+                    chosen = d
+                    break
+        if chosen is None:
+            chosen = out_deals[-1]
+        raw_pnl = getattr(chosen, "profit", None)
+        raw_vol = getattr(chosen, "volume", None)
+        pnl = float(raw_pnl) if raw_pnl is not None else None
+        vol = float(raw_vol) if raw_vol is not None else None
+        return pnl, vol

@@ -460,3 +460,78 @@ def test_order_send_exception_handled() -> None:
     # Should not raise — exception is caught and returned as failed event
     events = mgr.process_positions([pos])
     assert any(e.event_type == "partial_close_failed" for e in events)
+
+
+# ---------------------------------------------------------------------------
+# Partial-leg realized PnL capture (the per-leg booking fix)
+# ---------------------------------------------------------------------------
+
+
+class _Deal:
+    def __init__(self, ticket: int, entry: int, profit: float, volume: float) -> None:
+        self.ticket = ticket
+        self.entry = entry  # 0 = IN, 1 = OUT
+        self.profit = profit
+        self.volume = volume
+
+
+class _OrderResultWithDeal(_OrderResult):
+    def __init__(self, deal: int, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.deal = deal
+
+
+class _MockMT5WithHistory(_MockMT5):
+    """Mock that also returns a partial OUT deal via history_deals_get."""
+
+    def __init__(self, *, partial_pnl: float, partial_volume: float, deal_id: int = 5555,
+                 retcodes: list[int] | None = None) -> None:
+        super().__init__(retcodes=retcodes)
+        self._partial_pnl = partial_pnl
+        self._partial_volume = partial_volume
+        self._deal_id = deal_id
+
+    def order_send(self, request: dict) -> _OrderResult:
+        retcode = self._retcodes[min(self._call_index, len(self._retcodes) - 1)]
+        self._call_index += 1
+        self.requests.append(dict(request))
+        return _OrderResultWithDeal(deal=self._deal_id, retcode=retcode)
+
+    def history_deals_get(self, position: int | None = None):
+        # One IN deal (the open) and one OUT deal (the partial close)
+        return [
+            _Deal(ticket=1, entry=0, profit=0.0, volume=self._partial_volume),
+            _Deal(ticket=self._deal_id, entry=1, profit=self._partial_pnl,
+                  volume=self._partial_volume),
+        ]
+
+
+def test_partial_close_event_carries_broker_realized_pnl() -> None:
+    mt5 = _MockMT5WithHistory(partial_pnl=164.65, partial_volume=2.66,
+                              retcodes=[_RETCODE_DONE, _RETCODE_DONE])
+    mgr = _make_manager(mt5)
+    pos = _make_pos(side="BUY", lot_size=5.32, open_price=1.10000, sl=1.09800,
+                    current_price=1.10200)
+
+    events = mgr.process_positions([pos])
+    pc = next(e for e in events if e.event_type == "partial_close_sent")
+
+    assert pc.detail["realized_pnl"] == 164.65
+    assert pc.detail["closed_volume"] == 2.66
+    assert pc.detail["deal"] == 5555
+
+
+def test_partial_close_pnl_none_when_history_unavailable() -> None:
+    # Plain _MockMT5 has no history_deals_get → realized_pnl falls back to None,
+    # event still emitted (must not block breakeven).
+    mt5 = _MockMT5(retcodes=[_RETCODE_DONE, _RETCODE_DONE])
+    mgr = _make_manager(mt5)
+    pos = _make_pos(side="BUY", lot_size=0.02, open_price=1.10000, sl=1.09800,
+                    current_price=1.10200)
+
+    events = mgr.process_positions([pos])
+    pc = next(e for e in events if e.event_type == "partial_close_sent")
+
+    assert pc.detail["realized_pnl"] is None
+    # closed_volume falls back to the requested partial volume
+    assert pc.detail["closed_volume"] == 0.01

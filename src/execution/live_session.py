@@ -100,6 +100,40 @@ def _origin_session_ended(pos: "LivePosition", now: datetime, sessions_cfg: dict
     return now >= session_end
 
 
+def _build_partial_close_record(
+    ev: Any, pos: "LivePosition | None", run_id: str
+) -> dict | None:
+    """Build a trade_partial_close ledger record for a partial-close leg.
+
+    Books the broker-confirmed realized PnL of the partial leg so the trades
+    ledger reflects the full position result. Realized PnL for a trade_id is
+    the SUM of close_pnl across all trade_partial_close + trade_close records
+    (the open record carries no close_pnl, so there is no double counting).
+
+    Returns None when there is no position context to attribute the leg to.
+    """
+    if pos is None or not pos.trade_id:
+        return None
+    detail = ev.detail or {}
+    return {
+        "event": "trade_partial_close",
+        "trade_id": pos.trade_id,
+        "decision_id": pos.decision_id,
+        "ticket": ev.ticket,
+        "symbol": ev.symbol,
+        "side": pos.side,
+        "lot_size": detail.get("closed_volume", detail.get("volume")),
+        "open_price": pos.open_price,
+        "close_price": detail.get("price"),
+        "close_time": ev.timestamp,
+        "close_reason": "partial_close",
+        "close_pnl": detail.get("realized_pnl"),
+        "status": "partial_closed",
+        "run_id": run_id,
+        "timestamp": ev.timestamp,
+    }
+
+
 class LiveSession:
     """Run a complete live session: decision pipeline + real execution."""
 
@@ -452,6 +486,7 @@ class LiveSession:
 
         # Run trailing / breakeven / partial-close management on all open positions.
         trail_events = trailing_manager.process_positions(open_positions)
+        _pos_by_ticket = {p.ticket: p for p in open_positions}
         for ev in trail_events:
             self.writer.write_position_event({
                 "event": ev.event_type,
@@ -461,6 +496,16 @@ class LiveSession:
                 "timestamp": ev.timestamp,
                 **ev.detail,
             })
+            # Book the realized PnL of a partial-close leg to the trades ledger.
+            # Without this, only the runner's final close is recorded and the
+            # partial leg's PnL is lost — understating realized PnL on every
+            # scaled trade.
+            if ev.event_type == "partial_close_sent":
+                _partial_rec = _build_partial_close_record(
+                    ev, _pos_by_ticket.get(ev.ticket), run_id
+                )
+                if _partial_rec is not None:
+                    self.writer.write_trade_close(_partial_rec)
 
         # Session close exit — force-close any position whose origin session has ended.
         # Runs after trailing manager so trail/breakeven events are recorded first.
