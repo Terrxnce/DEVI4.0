@@ -44,7 +44,7 @@ from src.execution.recheck import (
     market_open_diagnostics_from_snapshot,
 )
 from src.ops.namespace_guard import NamespaceGuard, NamespaceViolationError
-from src.ops.telemetry import RunManifest, TelemetryWriter
+from src.ops.telemetry import TelemetryWriter
 from tools.check_comparability import check_comparability
 from tools.evidence_pack import build_evidence_pack
 from tools.replay import replay_snapshot_file
@@ -1000,7 +1000,14 @@ def cmd_live_status(args: argparse.Namespace) -> int:
 
 
 def cmd_run(args: argparse.Namespace) -> int:
-    mode = getattr(args, "run_command", None) or getattr(args, "mode", "paper")
+    """Handle `run live`. This is always a rejection path: real live execution
+
+    only ever goes through `live armed-run` or `live scan`, because arming
+    tokens are process-local and this command never arms one. That makes
+    `run live` an intentional dead end, not a run path — it exists so a
+    fat-fingered `run live` can't execute anything.
+    """
+    mode = getattr(args, "run_command", None) or getattr(args, "mode", "live")
     namespace = _namespace_enum(args.namespace)
     output = _resolve_run_output(args, namespace)
 
@@ -1022,38 +1029,8 @@ def cmd_run(args: argparse.Namespace) -> int:
             {"tool": "run", "verdict": "FAIL", "reason": str(exc), "exit_code": 1},
         )
 
-    if mode == "live":
-        auto_execute_live = bool(cfg.get("execution", {}).get("auto_execute_live", False))
-        if auto_execute_live:
-            payload = {
-                "tool": "run",
-                "namespace": namespace.value,
-                "mode": mode,
-                "config": args.config,
-                "run_id": args.run_id,
-                "output": output,
-                "final_decision": "REJECTED_EXECUTION",
-                "failure_code": "live_requires_armed_run",
-                "verdict": "FAIL",
-                "exit_code": 1,
-            }
-            return _print_report(
-                "run",
-                [
-                    f"Namespace  : {namespace.value}",
-                    f"Mode       : {mode}",
-                    f"Config     : {args.config}",
-                    f"Run ID     : {args.run_id}",
-                    f"Output     : {output}",
-                    "Final      : REJECTED_EXECUTION",
-                    "Reason     : live_requires_armed_run",
-                    "Verdict    : FAIL",
-                    "Exit code  : 1",
-                ],
-                args.json,
-                payload,
-            )
-
+    auto_execute_live = bool(cfg.get("execution", {}).get("auto_execute_live", False))
+    if auto_execute_live:
         payload = {
             "tool": "run",
             "namespace": namespace.value,
@@ -1062,7 +1039,7 @@ def cmd_run(args: argparse.Namespace) -> int:
             "run_id": args.run_id,
             "output": output,
             "final_decision": "REJECTED_EXECUTION",
-            "failure_code": "live_not_armed",
+            "failure_code": "live_requires_armed_run",
             "verdict": "FAIL",
             "exit_code": 1,
         }
@@ -1075,7 +1052,7 @@ def cmd_run(args: argparse.Namespace) -> int:
                 f"Run ID     : {args.run_id}",
                 f"Output     : {output}",
                 "Final      : REJECTED_EXECUTION",
-                "Reason     : live_not_armed",
+                "Reason     : live_requires_armed_run",
                 "Verdict    : FAIL",
                 "Exit code  : 1",
             ],
@@ -1083,29 +1060,17 @@ def cmd_run(args: argparse.Namespace) -> int:
             payload,
         )
 
-    writer = TelemetryWriter(logs_root=args.logs_root, namespace=namespace)
-    run_hash = config_hash(cfg)
-
-    manifest = RunManifest(
-        run_id=args.run_id,
-        build_id=str(cfg.get("build_id", "4.0.0")),
-        config_hash=run_hash,
-        namespace=namespace.value,
-        mode=mode,
-        data_source=str(cfg.get("runtime", {}).get("data_source", "snapshot")),
-        start_time=datetime.now(tz=UTC).isoformat(),
-    )
-    manifest_path = writer.write_run_manifest(manifest)
-
     payload = {
         "tool": "run",
         "namespace": namespace.value,
         "mode": mode,
         "config": args.config,
         "run_id": args.run_id,
-        "output": str(manifest_path),
-        "verdict": "PASS",
-        "exit_code": 0,
+        "output": output,
+        "final_decision": "REJECTED_EXECUTION",
+        "failure_code": "live_not_armed",
+        "verdict": "FAIL",
+        "exit_code": 1,
     }
     return _print_report(
         "run",
@@ -1114,9 +1079,11 @@ def cmd_run(args: argparse.Namespace) -> int:
             f"Mode       : {mode}",
             f"Config     : {args.config}",
             f"Run ID     : {args.run_id}",
-            f"Output     : {manifest_path}",
-            "Verdict    : PASS",
-            "Exit code  : 0",
+            f"Output     : {output}",
+            "Final      : REJECTED_EXECUTION",
+            "Reason     : live_not_armed",
+            "Verdict    : FAIL",
+            "Exit code  : 1",
         ],
         args.json,
         payload,
@@ -1259,7 +1226,6 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     checks = {
         "python": "PASS",
         "config_exists": "PASS" if Path(args.config).exists() else "FAIL",
-        "broker_connectivity": "SKIPPED" if not args.broker else "PENDING",
     }
     verdict = "PASS" if checks["config_exists"] == "PASS" else "FAIL"
     payload = {
@@ -1304,7 +1270,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     run = sub.add_parser("run")
     run_sub = run.add_subparsers(dest="run_command", required=True)
-    for mode_name in ("backtest", "paper", "shadow", "live"):
+    for mode_name in ("live",):
         run_mode = run_sub.add_parser(mode_name)
         _add_common(run_mode, include_mode=False)
         run_mode.add_argument("--logs-root", default="logs")
@@ -1348,7 +1314,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     doctor = sub.add_parser("doctor")
     _add_common(doctor)
-    doctor.add_argument("--broker", action="store_true")
     doctor.set_defaults(func=cmd_doctor)
 
     live = sub.add_parser("live")
@@ -1392,43 +1357,6 @@ def build_parser() -> argparse.ArgumentParser:
     live_scan.add_argument("--reason", default="")
     live_scan.add_argument("--logs-root", default="logs")
     live_scan.set_defaults(func=cmd_live_scan, namespace="prod")
-
-    preflight = sub.add_parser("preflight")
-    _add_common(preflight)
-    preflight.set_defaults(func=lambda args: _print_report(
-        "preflight",
-        [
-            f"Namespace  : {args.namespace}",
-            f"Mode       : {args.mode}",
-            f"Config     : {args.config}",
-            f"Run ID     : {args.run_id}",
-            "Output     : Phase 0 placeholder",
-            "Verdict    : PASS",
-            "Exit code  : 0",
-        ],
-        args.json,
-        {"tool": "preflight", "verdict": "PASS", "exit_code": 0},
-    ))
-
-    phase = sub.add_parser("phase")
-    phase_sub = phase.add_subparsers(dest="phase_command", required=True)
-    phase_verify = phase_sub.add_parser("verify")
-    _add_common(phase_verify)
-    phase_verify.add_argument("--phase", required=True)
-    phase_verify.set_defaults(func=lambda args: _print_report(
-        "phase verify",
-        [
-            f"Namespace  : {args.namespace}",
-            f"Mode       : {args.mode}",
-            f"Config     : {args.config}",
-            f"Run ID     : {args.run_id}",
-            f"Output     : Phase {args.phase} verification placeholder",
-            "Verdict    : PASS",
-            "Exit code  : 0",
-        ],
-        args.json,
-        {"tool": "phase verify", "verdict": "PASS", "exit_code": 0},
-    ))
 
     return parser
 

@@ -100,9 +100,8 @@ def test_paper_session_runs_with_mock_mt5(tmp_path) -> None:
         config=cfg,
         logs_root=str(tmp_path / "logs"),
         namespace=Namespace.EVAL,
+        data_source=MT5DataSource(mt5_client=_mock_mt5_client()),
     )
-    # Inject mock client
-    session.data = MT5DataSource(mt5_client=_mock_mt5_client())
 
     result = session.run(run_id="test_paper_001")
     session.close()
