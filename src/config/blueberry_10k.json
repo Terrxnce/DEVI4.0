@@ -117,7 +117,11 @@
     "same_direction_correlation_cap": 5,
     "dynamic_lot_sizing": true,
     "max_usd_correlated_positions": 3,
-    "max_jpy_correlated_positions": 2
+    "max_jpy_correlated_positions": 2,
+    "max_positions_per_currency": {
+      "default": 2,
+      "USD": 3
+    }
   },
   "gates": {
     "allowed_setups": [

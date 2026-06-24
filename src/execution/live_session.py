@@ -43,7 +43,7 @@ from src.ops.ftmo_risk_monitor import FTMORiskMonitor
 from src.ops.economic_calendar import EconomicCalendar
 from src.context.regime import simple_atr
 from src.zones.tracker import ZoneTracker
-from src.risk.usd_correlation import count_jpy_positions, count_usd_positions
+from src.risk.usd_correlation import count_jpy_positions, count_usd_positions, currency_counts
 
 
 _DEFAULT_M15_BAR_COUNT = 250
@@ -676,6 +676,7 @@ class LiveSession:
             "jpy_correlated_positions": count_jpy_positions(
                 [p.symbol for p in open_positions]
             ),
+            "currency_counts": currency_counts([p.symbol for p in open_positions]),
         }
 
         # FTMO floor breach — halt all new trade evaluation immediately.

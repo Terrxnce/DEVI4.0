@@ -7,6 +7,9 @@ from typing import Any
 from src.core.models import ContextSnapshot, RiskVerdict
 
 
+from src.risk.usd_correlation import currencies_in
+
+
 @dataclass(frozen=True)
 class RiskState:
     daily_pnl_pct: float = 0.0
@@ -18,6 +21,7 @@ class RiskState:
     same_direction_correlated_positions: int = 0
     usd_correlated_positions: int = 0
     jpy_correlated_positions: int = 0
+    currency_counts: dict | None = None
     account_balance: float = 10000.0
 
 
@@ -36,6 +40,7 @@ def _coerce_state(state: dict[str, Any] | None) -> RiskState:
         same_direction_correlated_positions=int(state.get("same_direction_correlated_positions", 0)),
         usd_correlated_positions=int(state.get("usd_correlated_positions", 0)),
         jpy_correlated_positions=int(state.get("jpy_correlated_positions", 0)),
+        currency_counts=dict(state.get("currency_counts") or {}),
         account_balance=float(state.get("account_balance", 10000.0)),
     )
 
@@ -171,6 +176,18 @@ def evaluate_risk(
     jpy_cap = risk_cfg.get("max_jpy_correlated_positions")
     if jpy_cap is not None and snapshot.jpy_correlated_positions >= int(jpy_cap):
         return RiskVerdict(False, 0.0, 0.0, intended_risk, "jpy_correlation_cap")
+
+    # Per-currency exposure cap - generalizes the USD/JPY caps to every
+    # currency. Blocks a new trade only when one of ITS currencies is already
+    # at the configured limit, so diversified trades are unaffected.
+    per_ccy_cap = risk_cfg.get("max_positions_per_currency")
+    if per_ccy_cap is not None:
+        default_cap = int(per_ccy_cap.get("default", 99))
+        counts = snapshot.currency_counts or {}
+        for _ccy in currencies_in(context.symbol):
+            cap = int(per_ccy_cap.get(_ccy, default_cap))
+            if int(counts.get(_ccy, 0)) >= cap:
+                return RiskVerdict(False, 0.0, 0.0, intended_risk, "currency_cap:" + _ccy)
 
     # Fixed lot mode - skip dynamic calculation, use configured lot directly.
     # Drawdown and position guards above still apply.

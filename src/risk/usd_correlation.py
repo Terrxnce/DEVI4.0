@@ -61,3 +61,37 @@ def is_jpy_pair(symbol: str) -> bool:
 def count_jpy_positions(open_symbols: list[str]) -> int:
     """Count how many symbols in *open_symbols* are JPY pairs."""
     return sum(1 for s in open_symbols if is_jpy_pair(s))
+
+
+# Recognised FX currency codes. A symbol is treated as an FX pair only when both
+# its 3-letter halves are in this set — which automatically excludes metals
+# (XAUUSD -> XAU), indices (US30.cash -> USC), and any non-FX instrument.
+_FX_CURRENCIES: frozenset[str] = frozenset({
+    "USD", "EUR", "GBP", "JPY", "CHF", "AUD", "NZD", "CAD",
+})
+
+
+def currencies_in(symbol: str) -> set[str]:
+    """Return the base+quote FX currencies in a symbol (EURCHF -> {EUR, CHF}).
+
+    Returns an empty set for metals, indices, and any instrument that is not a
+    pair of two recognised FX currencies. Broker suffixes (.pi, .pro, m) are
+    stripped before parsing.
+    """
+    clean = symbol.upper().replace(".", "").replace("_", "").replace("-", "")
+    core = "".join(c for c in clean if c.isalpha())[:6]
+    if len(core) < 6:
+        return set()
+    base, quote = core[:3], core[3:6]
+    if base in _FX_CURRENCIES and quote in _FX_CURRENCIES:
+        return {base, quote}
+    return set()
+
+
+def currency_counts(open_symbols: list[str]) -> dict[str, int]:
+    """Map each currency to how many open symbols involve it (base or quote)."""
+    counts: dict[str, int] = {}
+    for s in open_symbols:
+        for c in currencies_in(s):
+            counts[c] = counts.get(c, 0) + 1
+    return counts
