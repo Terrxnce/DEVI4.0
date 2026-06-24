@@ -308,15 +308,24 @@ class LivePositionTracker:
         out_deals = [d for d in deals if int(getattr(d, "entry", -1)) == _DEAL_ENTRY_OUT]
         if not out_deals:
             return
-        deal = out_deals[-1]  # last OUT deal
+        deal = out_deals[-1]  # last OUT deal - describes the final exit
         raw_price = getattr(deal, "price", None)
-        raw_pnl = getattr(deal, "profit", None)
         raw_reason = getattr(deal, "reason", None)
         raw_time = getattr(deal, "time", None)
+        # Sum realized profit across ALL out deals so a scaled position reports
+        # its full-position PnL (partial legs + runner), not just the final leg.
+        # For a single-exit position this equals the one deal's profit (parity).
+        total_pnl = 0.0
+        have_pnl = False
+        for _d in out_deals:
+            _p = getattr(_d, "profit", None)
+            if _p is not None:
+                total_pnl += float(_p)
+                have_pnl = True
         if raw_price is not None:
             pos.close_price = float(raw_price)
-        if raw_pnl is not None:
-            pos.close_pnl = float(raw_pnl)
+        if have_pnl:
+            pos.close_pnl = total_pnl
         if raw_reason is not None:
             pos.close_reason = _map_deal_reason(int(raw_reason))
         if raw_time is not None:
