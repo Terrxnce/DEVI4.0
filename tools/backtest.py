@@ -34,7 +34,8 @@ from datetime import datetime
 import os as _os, sys as _sys
 _sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
 
-from src.core.enums import Direction, Timeframe
+from src.core.enums import Direction, Timeframe, StructureType
+from src.narrative.choch_detector import CHoCHDetector
 from src.core.models import Bar
 from src.context.builder import build_context_snapshot
 from src.context.references import compute_reference_levels
@@ -51,6 +52,15 @@ from src.core.runtime_state import RuntimeState
 
 WARMUP = 250
 M15_N, H1_N, H4_N = 250, 400, 300
+OB_CLASSES = {"OB_WITH_BOS", "OB_WITH_FVG", "OB_WITH_ENGULFING",
+             "SWEEP_WITH_OB", "JUDAS_WITH_OB"}
+
+
+def _find_ob(conf):
+    for s in [conf.primary_trigger, *conf.structural_confirmations]:
+        if s is not None and s.structure_type == StructureType.ORDER_BLOCK:
+            return s
+    return None
 
 
 def _infer_instrument(symbol: str) -> dict:
@@ -116,7 +126,7 @@ def forward_label(m15, start_i, direction, sl, tp, horizon):
     return "timeout", end - start_i
 
 
-def backtest_symbol(symbol, bars, config, stride, horizon, block_ranging):
+def backtest_symbol(symbol, bars, config, stride, horizon, block_ranging, require_choch=False):
     m15 = bars.get(Timeframe.M15, [])
     h1 = bars.get(Timeframe.H1, [])
     h4 = bars.get(Timeframe.H4, [])
@@ -131,6 +141,7 @@ def backtest_symbol(symbol, bars, config, stride, horizon, block_ranging):
 
     zt = ZoneTracker(max_zone_age_bars=int(det_cfg.get("max_zone_age_bars", 50)))
     arming, kill, rstate = ArmingService(), KillSwitch(), RuntimeState(run_id="bt")
+    choch = CHoCHDetector()
     h1p = h4p = 0
     rows = []
 
@@ -183,6 +194,10 @@ def backtest_symbol(symbol, bars, config, stride, horizon, block_ranging):
             continue
         if block_ranging and getattr(ctx.regime, "value", "") == "RANGING":
             continue
+        if require_choch and conf.setup_class.value in OB_CLASSES:
+            _ob = _find_ob(conf)
+            if _ob is None or not choch.detect(structures, _ob.bar_index, conf.direction).detected:
+                continue
         result, bars_held = forward_label(m15, i + 1, conf.direction, plan.stop_loss, plan.take_profit, horizon)
         rr = float(plan.risk_reward or 0.0)
         r_mult = rr if result == "win" else (-1.0 if result == "loss" else 0.0)
@@ -227,10 +242,20 @@ def main():
     ap.add_argument("--stride", type=int, default=4, help="evaluate every Nth M15 bar")
     ap.add_argument("--horizon", type=int, default=192, help="max M15 bars to resolve a trade")
     ap.add_argument("--block-ranging", action="store_true")
+    ap.add_argument("--drop-fvg", action="store_true", help="exclude OB_WITH_FVG from allowed setups")
+    ap.add_argument("--min-gap", type=float, default=None, help="override FVG min_gap_atr_mult")
+    ap.add_argument("--require-choch", action="store_true", help="require CHoCH confirmation on OB setups")
     ap.add_argument("--out", default="logs/backtest/trades.csv")
     args = ap.parse_args()
 
     config = json.load(open(args.config, encoding="utf-8"))
+    if args.drop_fvg:
+        _g = config.setdefault("gates", {})
+        _g["allowed_setups"] = [x for x in _g.get("allowed_setups", []) if x != "OB_WITH_FVG"]
+    if args.min_gap is not None:
+        config.setdefault("detection", {}).setdefault("fair_value_gap", {})["min_gap_atr_mult"] = args.min_gap
+    _active = [f for f, on in [("drop-fvg", args.drop_fvg), ("min-gap=%s" % args.min_gap, args.min_gap is not None), ("require-choch", args.require_choch), ("block-ranging", args.block_ranging)] if on]
+    print("Active experiment flags: " + (", ".join(_active) if _active else "NONE (baseline)"))
     print("Loading bars from %s ..." % args.bars)
     data = load_bars(args.bars)
     syms = ([s.strip() for s in args.symbols.split(",")] if args.symbols
@@ -240,7 +265,7 @@ def main():
     for sym in syms:
         if sym not in data:
             continue
-        rows = backtest_symbol(sym, data[sym], config, args.stride, args.horizon, args.block_ranging)
+        rows = backtest_symbol(sym, data[sym], config, args.stride, args.horizon, args.block_ranging, args.require_choch)
         all_rows.extend(rows)
         print("  %-12s %5d setups" % (sym, len(rows)))
 
